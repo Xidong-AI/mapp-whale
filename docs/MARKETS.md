@@ -1,92 +1,99 @@
-# 预言鲸 · 市场定义
+# 预言鲸 · 市场定义（多结果市场）
 
-线上数据存在 D1 `whale` 的 `markets` 表，本文用于复现、审计和重建。管理操作走 `/admin/markets`，需要 `ADMIN_TOKEN`。
+线上数据在 D1 `whale`，本文记录当前 3 个市场及其 outcome 条件。所有截止均为北京时间。
 
-## 当前市场
+## 1. `m_v5_when` V5 什么时候发布？
 
-| ID              | 标题                      | 判定条件                                                                 | 截止（北京时间）    | 状态   |
-| --------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------- | ------ |
-| `m_v41pro_2026`   | V4.1 Pro 在 12 月前发布？ | `name` 匹配 `/DeepSeek[- ]?V4\.1[- ]?Pro/i`                                 | 2026-12-01 00:00    | open   |
-| `m_v5_2026`       | V5 在 2026 年底前出现？   | `name` 匹配 `/DeepSeek[- ]?V5/i`                                            | 2026-12-31 23:59:59 | open   |
-| `m_v41pro_1m`     | V4.1 Pro 上下文达到 1M？  | `name` 匹配 V4.1 Pro 的模型 `context_window >= 1048576`                      | 2027-03-31 23:59:59 | open   |
-| `m_ctx_2m`        | V5 上下文达到 2M？        | `name` 匹配 V5 的模型 `context_window >= 2097152`                            | 2027-06-30 23:59:59 | open   |
-| `m_ctx_4m`        | V5 上下文达到 4M？        | `name` 匹配 V5 的模型 `context_window >= 4194304`                            | 2027-06-30 23:59:59 | open   |
-| `m_out_256k`      | V5 输出上限达到 256K？    | `name` 匹配 V5 的模型 `max_output_tokens >= 262144`                          | 2027-06-30 23:59:59 | open   |
-| `m_out_500k`      | V5 输出上限达到 500K？    | `name` 匹配 V5 的模型 `max_output_tokens >= 512000`                          | 2027-06-30 23:59:59 | open   |
-| `m_v5_2027h1`     | V5 在 2027 上半年出现？   | `name` 匹配 `/DeepSeek[- ]?V5/i`（当前与 `m_v5_2026` 重叠）                    | 2027-06-30 23:59:59 | locked |
+- 截止：2028-12-31 23:59:59
+- 结算：`exclusive`，fallback `never`
+- 条件：`first_seen_between`，regex `DeepSeek[- ]?V5`，flags `i`
 
-## 条件 JSON
+| outcome | 标签 | 窗口 |
+| ------- | ---- | ---- |
+| `2026q4` | 2026 Q4 | 2026-10-01 ~ 2027-01-01 |
+| `2027q1` | 2027 Q1 | 2027-01-01 ~ 2027-04-01 |
+| `2027q2` | 2027 Q2 | 2027-04-01 ~ 2027-07-01 |
+| `2027q3` | 2027 Q3 | 2027-07-01 ~ 2027-10-01 |
+| `2027q4` | 2027 Q4 | 2027-10-01 ~ 2028-01-01 |
+| `2028plus` | 2028 及以后 | 2028-01-01 起，无上限 |
+| `never` | 未发布 | fallback |
+
+## 2. `m_v5_context` V5 的上下文窗口有多大？
+
+- 截止：2028-12-31 23:59:59
+- 结算：`exclusive`，fallback `unknown`
+- 条件：`field_range`，`targetNameRegex` `DeepSeek[- ]?V5`，`field` `context_window`，`selector` `first`
+
+| outcome | 标签 | 区间 |
+| ------- | ---- | ---- |
+| `lt-1m` | < 1M | `[null, 1048576)` |
+| `1m-2m` | 1M – 2M | `[1048576, 2097152)` |
+| `2m-4m` | 2M – 4M | `[2097152, 4194304)` |
+| `ge-4m` | ≥ 4M | `[4194304, null)` |
+| `unknown` | 无法判定 | fallback |
+
+## 3. `m_v5_output` V5 的输出上限有多大？
+
+- 截止：2028-12-31 23:59:59
+- 结算：`exclusive`，fallback `unknown`
+- 条件：`field_range`，`field` `max_output_tokens`，`selector` `first`
+
+| outcome | 标签 | 区间 |
+| ------- | ---- | ---- |
+| `lt-128k` | < 128K | `[null, 131072)` |
+| `128k-256k` | 128K – 256K | `[131072, 262144)` |
+| `256k-500k` | 256K – 500K | `[262144, 512000)` |
+| `ge-500k` | ≥ 500K | `[512000, null)` |
+| `unknown` | 无法判定 | fallback |
+
+## 条件 DSL
 
 ```jsonc
-// name_regex
-{ "kind": "name_regex", "regex": "DeepSeek[- ]?V5", "flags": "i" }
+// 时间窗口
+{ "kind": "first_seen_between", "regex": "DeepSeek[- ]?V5", "flags": "i", "start": 1790784000000, "end": 1798732800000 }
 
-// field_threshold
-{
-  "kind": "field_threshold",
-  "targetNameRegex": "DeepSeek[- ]?V5",
-  "field": "context_window",
-  "op": ">=",
-  "value": 2097152
-}
+// 数值区间
+{ "kind": "field_range", "targetNameRegex": "DeepSeek[- ]?V5", "flags": "i", "field": "context_window", "min": 1048576, "max": 2097152, "selector": "first" }
+
+// 模态数组
+{ "kind": "field_includes", "targetNameRegex": "DeepSeek[- ]?V5", "flags": "i", "field": "input_modalities", "value": "image", "selector": "first" }
 ```
 
-`name_regex` 匹配 `/models` 返回项的 `name` 字段，不匹配稳定别名 `id`。
+结算时按 `settle_mode` 选 outcome：
 
-## 已知重叠
+- `first_match`：按 `sort_order` 第一个命中。
+- `exclusive`：恰好一个命中；多个命中 → `void` 退款；零命中且到截止 → fallback。
+- `manual`：仅管理员结算。
 
-`m_v5_2026` 和 `m_v5_2027h1` 都是“截止前 `name` 出现 V5”。如果 V5 在 2026 年发布：
-
-- `m_v5_2026` 命中，结算为「是」；
-- `m_v5_2027h1` 也会命中，同样结算为「是」。
-
-这不是“后者失效”，而是两个池重复计奖。`m_v5_2027h1` 已先 `locked`，暂停下注。
-
-正确做法是给长期池加首次出现时间窗口：
-
-```jsonc
-{
-  "kind": "first_seen_between",
-  "regex": "DeepSeek[- ]?V5",
-  "flags": "i",
-  "start": 1798732800000, // 2027-01-01 00:00 +08
-  "end": 1814371200000   // 2027-07-01 00:00 +08
-}
-```
-
-判定语义：
-
-- 首次观测到匹配模型时写入 `first_seen_at`；
-- `first_seen_at` 落在 `[start, end)` 内 → 「是」；
-- `first_seen_at < start`（提前发布）→ 「否」；
-- 截止时仍未出现 → 「否」。
-
-这样 `m_v5_2026` 和 `m_v5_2027h1` 互斥，不会双赢。
-
-## 重建方式
+## 重建
 
 ```sh
-export BASE=https://mapp-whale.pj568.eu.org
-export ADMIN_TOKEN=...
+cd server
+bunx wrangler d1 migrations apply whale --remote
+```
 
-curl -X POST "$BASE/admin/markets" \
+或通过管理 API：
+
+```sh
+curl -X POST https://mapp-whale.pj568.eu.org/admin/markets \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "id": "m_ctx_4m",
-    "title": "V5 的上下文窗口达到 4M？",
-    "description": "北京时间 2027-06-30 23:59:59 前，官方 /models 中任一 name 匹配 /DeepSeek[- ]?V5/i 的模型，其 context_window 字段大于等于 4194304（4M）。后台连续两次轮询命中即结算为「是」；截止时未命中结算为「否」。",
-    "condition": { "kind": "field_threshold", "targetNameRegex": "DeepSeek[- ]?V5", "field": "context_window", "op": ">=", "value": 4194304 },
-    "deadline": 1814371199000,
-    "seedYes": 5000,
-    "seedNo": 5000
+    "id": "m_v5_context",
+    "title": "V5 的上下文窗口有多大？",
+    "description": "取 /models 中首个 name 匹配 V5 的模型，比较 context_window。",
+    "deadline": 1861891199000,
+    "settleMode": "exclusive",
+    "fallbackOutcomeId": "unknown",
+    "outcomes": [
+      { "id": "lt-1m", "label": "< 1M", "seed": 1000, "condition": { "kind": "field_range", "targetNameRegex": "DeepSeek[- ]?V5", "flags": "i", "field": "context_window", "min": null, "max": 1048576, "selector": "first" } }
+    ]
   }'
 ```
 
-## 结算约定
+## 结算
 
 - Cron 每 10 分钟拉取 `https://api.deepseek.com/models`。
-- 连续 `poll_confirmations`（默认 2）次命中才结算为「是」。
-- 截止时未命中结算为「否」。
-- 彩池为 parimutuel：赢方按投入比例瓜分总池，系统种子参与分账，余数销毁。
+- 连续 `poll_confirmations`（默认 2）次命中才视为有效。
+- 每个 outcome 一个池；赢家按投入比例瓜分总池，系统种子参与分账，余数销毁。
 - 预期回报随下注实时变化，最终以结算时池子为准。
