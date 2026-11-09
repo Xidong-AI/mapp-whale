@@ -224,14 +224,8 @@ export function createProfileView(ctx: AppContext): ProfileView {
 
     const primary = el("div");
     const side = el("div", "record__side");
-    const sideWord = el(
-      "b",
-      row.side === "yes" ? "is-yes" : "is-no"
-    );
-    sideWord.append(
-      makeIcon(row.side === "yes" ? "i-up" : "i-down"),
-      document.createTextNode(sideLabel(row.side))
-    );
+    const sideWord = el("b");
+    sideWord.append(document.createTextNode(row.outcomeLabel));
     side.append(sideWord);
     primary.append(el("div", "record__title", titleText), side);
 

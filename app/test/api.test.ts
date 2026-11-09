@@ -27,7 +27,7 @@ function ok(data: unknown, status = 200) {
 
 const betInput: BetInput = {
   marketId: "m1",
-  side: "yes",
+  outcomeId: "2026q4",
   amount: 100,
   confidence: 72,
   clientRequestId: "8f1c1a5e-3f3c-4a1e-9d7e-5e3a0c9b2a10",
@@ -64,11 +64,14 @@ describe("API envelope parsing", () => {
             title: "V5？",
             deadline: 1798732799000,
             status: "open",
-            yesPool: 1200,
-            noPool: 800,
-            impliedYes: 0.6,
-            payoutYes: 1.83,
-            payoutNo: 2.75,
+            settleMode: "exclusive",
+            fallbackOutcomeId: "never",
+            winningOutcomeId: null,
+            totalPool: 2000,
+            outcomes: [
+              { id: "2026q4", label: "2026 Q4", pool: 1200, seed: 0, implied: 0.6, payout: 1.83 },
+              { id: "never", label: "未发布", pool: 800, seed: 0, implied: 0.4, payout: 2.5 },
+            ],
             participants: 88,
           },
         ],
@@ -81,10 +84,15 @@ describe("API envelope parsing", () => {
     expect(page.items[0]).toMatchObject({
       id: "m1",
       status: "open",
-      yesPool: 1200,
+      totalPool: 2000,
+      fallbackOutcomeId: "never",
       participants: 88,
     });
-    expect(page.items[0].outcome).toBeNull();
+    expect(page.items[0].outcomes[0]).toMatchObject({
+      id: "2026q4",
+      label: "2026 Q4",
+      implied: 0.6,
+    });
   });
 
   test("maps API failures to ApiError codes", async () => {
@@ -248,7 +256,8 @@ describe("API methods", () => {
     expect(positions.items[0]).toMatchObject({
       marketId: "m1",
       title: "标题",
-      side: "no",
+      outcomeId: "no",
+      outcomeLabel: "no",
       amount: 50,
       payout: 0,
       createdAt: 1_700_000_000_000,

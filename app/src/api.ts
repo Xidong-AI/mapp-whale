@@ -10,15 +10,15 @@ import type {
   LeaderboardEntry,
   LeaderboardType,
   Market,
-  MarketOutcome,
   MarketPage,
   MarketStatus,
   Me,
   MyRank,
+  Outcome,
   Page,
   PositionRow,
   PublicConfig,
-  Side,
+  SettleMode,
 } from "./types.ts";
 
 export interface TransportRequest {
@@ -99,13 +99,7 @@ function nullableString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function sideOf(value: unknown): Side {
-  return typeof value === "string" && value.toLowerCase() === "no"
-    ? "no"
-    : "yes";
-}
-
-const STATUSES = new Set<MarketStatus>(["open", "locked", "settled", "void"]);
+const STATUSES = new Set<MarketStatus>(["open", "locked", "settling", "settled", "void"]);
 
 function statusOf(value: unknown): MarketStatus {
   const normalized = typeof value === "string" ? value.toLowerCase() : "";
@@ -114,32 +108,45 @@ function statusOf(value: unknown): MarketStatus {
     : "open";
 }
 
-function outcomeOf(value: unknown): MarketOutcome | null {
+const SETTLE_MODES = new Set<SettleMode>(["first_match", "exclusive", "manual"]);
+
+function settleModeOf(value: unknown): SettleMode {
   const normalized = typeof value === "string" ? value.toLowerCase() : "";
-  return normalized === "yes" || normalized === "no" || normalized === "void"
-    ? normalized
-    : null;
+  return SETTLE_MODES.has(normalized as SettleMode)
+    ? (normalized as SettleMode)
+    : "exclusive";
+}
+
+function normalizeOutcome(value: unknown): Outcome {
+  const raw = record(value) ?? {};
+  return {
+    id: stringOf(raw.id),
+    label: stringOf(raw.label, "结果"),
+    pool: integerOf(raw.pool),
+    seed: integerOf(raw.seed),
+    implied: numberOf(raw.implied, 0),
+    payout: numberOf(raw.payout, 1),
+    hitCount: integerOf(raw.hitCount),
+    firstSeenAt: nullableNumber(raw.firstSeenAt),
+  };
 }
 
 export function normalizeMarket(value: unknown): Market {
   const raw = record(value) ?? {};
+  const outcomes = Array.isArray(raw.outcomes)
+    ? raw.outcomes.map(normalizeOutcome).filter((outcome) => outcome.id.length > 0)
+    : [];
   return {
     id: stringOf(raw.id),
     title: stringOf(raw.title, "未命名市场"),
     description: stringOf(raw.description),
     deadline: numberOf(raw.deadline),
     status: statusOf(raw.status),
-    outcome: outcomeOf(raw.outcome),
-    yesPool: integerOf(raw.yesPool),
-    noPool: integerOf(raw.noPool),
-    seedYes: integerOf(raw.seedYes),
-    seedNo: integerOf(raw.seedNo),
-    yesShare: numberOf(raw.yesShare),
-    impliedYes: numberOf(raw.impliedYes, 0.5),
-    payoutYes: numberOf(raw.payoutYes),
-    payoutNo: numberOf(raw.payoutNo),
-    hitCount: integerOf(raw.hitCount),
-    firstSeenAt: nullableNumber(raw.firstSeenAt),
+    settleMode: settleModeOf(raw.settleMode),
+    fallbackOutcomeId: nullableString(raw.fallbackOutcomeId),
+    winningOutcomeId: nullableString(raw.winningOutcomeId),
+    totalPool: integerOf(raw.totalPool),
+    outcomes,
     settledAt: nullableNumber(raw.settledAt),
     settleReason: nullableString(raw.settleReason),
     participants: nullableNumber(raw.participants ?? raw.participantCount),
@@ -188,7 +195,8 @@ function positionOf(value: unknown): PositionRow {
       nullableString(raw.marketTitle) ??
       nullableString(raw.market_title) ??
       nullableString(market?.title),
-    side: sideOf(raw.side),
+    outcomeId: stringOf(raw.outcomeId ?? raw.outcome_id ?? raw.side),
+    outcomeLabel: stringOf(raw.outcomeLabel ?? raw.outcome_label ?? raw.side),
     amount: integerOf(raw.amount ?? raw.stake ?? raw.staked ?? raw.total),
     status: stringOf(raw.status, "open"),
     payout: integerOf(raw.payout ?? raw.returned ?? raw.return),
@@ -203,7 +211,8 @@ function historyOf(value: unknown): HistoryRow {
     id: stringOf(raw.betId ?? raw.id),
     marketId: position.marketId,
     title: position.title,
-    side: position.side,
+    outcomeId: position.outcomeId,
+    outcomeLabel: position.outcomeLabel,
     amount: position.amount,
     status: position.status,
     payout: position.payout,
@@ -239,9 +248,10 @@ function normalizeBet(value: unknown): BetResult {
     chips: integerOf(raw.chips),
     market: {
       id: stringOf(market.id),
-      yesPool: integerOf(market.yesPool),
-      noPool: integerOf(market.noPool),
-      impliedYes: numberOf(market.impliedYes, 0.5),
+      totalPool: integerOf(market.totalPool),
+      outcomes: Array.isArray(market.outcomes)
+        ? market.outcomes.map(normalizeOutcome)
+        : [],
     },
   };
   if (typeof market.status === "string" || typeof market.deadline === "number") {

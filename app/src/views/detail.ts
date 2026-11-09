@@ -9,7 +9,7 @@ import {
   isOfflineError,
 } from "../errors.ts";
 import {
-  applyPoolUpdate,
+  applyOutcomePools,
   betIntentKey,
   betLimit,
   clampInteger,
@@ -100,6 +100,9 @@ export function createDetailView(ctx: AppContext): DetailView {
   const quoteMultiplier = byId("quote-multiplier");
   const quoteReturn = byId("quote-return");
 
+  const outcomePicker = el("div", "outcome-picker");
+  betForm.parentElement?.insertBefore(outcomePicker, betForm);
+
   const consensusYes = byId("consensus-yes");
   const consensusYesLabel = byId("consensus-yes-label");
   const consensusNoLabel = byId("consensus-no-label");
@@ -119,6 +122,7 @@ export function createDetailView(ctx: AppContext): DetailView {
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
   let transientHint = "";
   let deadlineHandled = false;
+  let selectedOutcomeId: string | null = null;
 
   function setTransientHint(text: string, tone: "error" | "ok" | "info"): void {
     transientHint = text;
@@ -139,6 +143,40 @@ export function createDetailView(ctx: AppContext): DetailView {
       ...(tone === "idle" ? [] : [makeIcon(tone === "yes" ? "i-up" : "i-down")]),
       document.createTextNode(label)
     );
+  }
+
+  function renderOutcomePicker(market: Market): void {
+    clear(outcomePicker);
+    const preferred = market.outcomes.some(
+      (outcome) => outcome.id === selectedOutcomeId
+    )
+      ? selectedOutcomeId
+      : market.outcomes[0]?.id ?? null;
+    selectedOutcomeId = preferred;
+    for (const outcome of market.outcomes) {
+      const button = el("button", "outcome-option") as HTMLButtonElement;
+      button.type = "button";
+      button.dataset.outcomeId = outcome.id;
+      button.classList.toggle("is-selected", outcome.id === preferred);
+      button.setAttribute("aria-pressed", String(outcome.id === preferred));
+      button.append(
+        el("span", "outcome-option__label", outcome.label),
+        el(
+          "span",
+          "outcome-option__meta",
+          `${impliedPercent(outcome.implied)}% · ${formatMultiplier(outcome.payout)}`
+        )
+      );
+      button.addEventListener("click", () => {
+        selectedOutcomeId = outcome.id;
+        renderOutcomePicker(market);
+        updateQuote();
+        updateSubmit();
+        ctx.setPrefs({ lastOutcomeId: outcome.id });
+      });
+      outcomePicker.append(button);
+    }
+    outcomePicker.hidden = market.outcomes.length === 0;
   }
 
   function updateWhale(confidence: number): void {
@@ -169,18 +207,14 @@ export function createDetailView(ctx: AppContext): DetailView {
     slider.classList.toggle("is-bull", stage.direction > 0);
     confidenceValue.textContent = formatConfidence(confidence);
 
-    const side = sideFor(confidence);
-    const sideLabel =
-      side === "yes"
-        ? t("detail.sideYes")
-        : side === "no"
-          ? t("detail.sideNo")
-          : t("detail.pendingSide");
-    setBetSide(sideLabel, side ?? "idle");
+    const selected = current?.outcomes.find(
+      (outcome) => outcome.id === selectedOutcomeId
+    );
+    setBetSide(selected?.label ?? t("detail.pendingSide"), "idle");
 
     slider.setAttribute(
       "aria-valuetext",
-      `${stage.label}，${sideLabel} ${Math.abs(confidence)}`
+      `${stage.label}，信心 ${Math.abs(confidence)}`
     );
   }
 
@@ -204,21 +238,19 @@ export function createDetailView(ctx: AppContext): DetailView {
   function updateQuote(): void {
     if (!current) return;
     amountInput.min = String(ctx.getConfig().betMin);
-    const confidence = Number(slider.value);
-    const side = sideFor(confidence);
-    const multiplier =
-      side === "yes"
-        ? current.payoutYes
-        : side === "no"
-          ? current.payoutNo
-          : 0;
-    setText(quoteMultiplier, side ? formatMultiplier(multiplier) : "—");
+    const selected = current.outcomes.find(
+      (outcome) => outcome.id === selectedOutcomeId
+    );
+    const multiplier = selected?.payout ?? 0;
+    setText(quoteMultiplier, selected ? formatMultiplier(multiplier) : "—");
 
     const amount = Number(amountInput.value);
     const validAmount = Number.isSafeInteger(amount) && amount > 0;
     setText(
       quoteReturn,
-      side && validAmount ? formatChips(previewReturn(amount, multiplier)) : "—"
+      selected && validAmount
+        ? formatChips(previewReturn(amount, multiplier))
+        : "—"
     );
 
     if (!ctx.isSignedIn()) {
@@ -248,8 +280,9 @@ export function createDetailView(ctx: AppContext): DetailView {
   function updateSubmit(): void {
     const signed = ctx.isSignedIn();
     const me = ctx.getMe();
-    const confidence = Number(slider.value);
-    const side = sideFor(confidence);
+    const selected = current?.outcomes.find(
+      (outcome) => outcome.id === selectedOutcomeId
+    );
     const check = amountCheck();
     const open =
       Boolean(current) &&
@@ -262,12 +295,12 @@ export function createDetailView(ctx: AppContext): DetailView {
       !me ||
       !current ||
       !open ||
-      side === null ||
+      !selected ||
       check === null ||
       !check.ok;
 
-    const directionText = t("detail.needDirection");
-    if (!transientHint && signed && side === null) {
+    const directionText = "请选择一个结果";
+    if (!transientHint && signed && !selected) {
       betHint.textContent = directionText;
     } else if (!transientHint && betHint.textContent === directionText) {
       betHint.textContent = "";
@@ -296,17 +329,18 @@ export function createDetailView(ctx: AppContext): DetailView {
   }
 
   function paintConsensus(market: Market): void {
-    const yes = impliedPercent(market.impliedYes);
-    consensusYes.style.width = `${yes}%`;
-    setText(consensusYesLabel, `${yes}%`);
-    setText(consensusNoLabel, `${100 - yes}%`);
+    const first = market.outcomes[0];
+    const second = market.outcomes[1];
+    const firstPct = impliedPercent(first?.implied ?? 0);
+    consensusYes.style.width = `${firstPct}%`;
+    setText(consensusYesLabel, `${first?.label ?? "—"} ${firstPct}%`);
+    setText(
+      consensusNoLabel,
+      `${second?.label ?? "—"} ${impliedPercent(second?.implied ?? 0)}%`
+    );
     setText(
       consensusPool,
-      t("detail.poolDetail", {
-        pool: formatChips(marketPoolTotal(market)),
-        yes: formatChips(market.yesPool),
-        no: formatChips(market.noPool),
-      })
+      `总池 ${formatChips(market.totalPool)} · ${market.outcomes.length} 个结果`
     );
     setText(
       consensusEyebrow,
@@ -334,15 +368,8 @@ export function createDetailView(ctx: AppContext): DetailView {
     const settled =
       market.status === "settled" || market.status === "void";
     const outcome =
-      market.status === "void"
-        ? t("status.void")
-        : market.outcome === "yes"
-          ? t("status.outcomeYes")
-          : market.outcome === "no"
-            ? t("status.outcomeNo")
-            : market.outcome === "void"
-              ? t("status.outcomeVoid")
-              : "—";
+      market.outcomes.find((item) => item.id === market.winningOutcomeId)?.label ??
+      (market.status === "void" ? t("status.void") : "—");
     const steps = [
       timelineStep(
         t("detail.timelineDeadline"),
@@ -352,15 +379,9 @@ export function createDetailView(ctx: AppContext): DetailView {
         market.status === "open" && market.deadline > now ? "current" : "done"
       ),
       timelineStep(
-        market.hitCount > 0
-          ? t("detail.timelineWatchHit", { count: market.hitCount })
-          : t("detail.timelineWatch"),
-        market.firstSeenAt
-          ? t("detail.timelineFirstSeen", {
-              time: formatDateTime(market.firstSeenAt),
-            })
-          : t("detail.timelineWatchNone"),
-        market.hitCount > 0 ? "done" : settled ? "done" : "future"
+        t("detail.timelineWatch"),
+        settled ? t("detail.timelineWatchNone") : t("detail.timelineWaiting"),
+        settled ? "done" : "future"
       ),
       timelineStep(
         t("detail.timelineSettle"),
@@ -389,15 +410,8 @@ export function createDetailView(ctx: AppContext): DetailView {
       const settled =
         market.status === "settled" || market.status === "void";
       const outcome =
-        market.status === "void"
-          ? t("status.void")
-          : market.outcome === "yes"
-            ? t("status.outcomeYes")
-            : market.outcome === "no"
-              ? t("status.outcomeNo")
-              : market.outcome === "void"
-                ? t("status.outcomeVoid")
-                : "";
+        market.outcomes.find((item) => item.id === market.winningOutcomeId)?.label ??
+        (market.status === "void" ? t("status.void") : "");
       betClosedResult.textContent = settled
         ? [outcome, formatDateTime(market.settledAt)].filter(Boolean).join(" · ")
         : t("detail.closedWaiting");
@@ -415,6 +429,7 @@ export function createDetailView(ctx: AppContext): DetailView {
     desc.textContent = market.description;
     setText(sliderHelp, t("detail.sliderHelp"));
     if (restore) restoreInputs(market);
+    renderOutcomePicker(market);
     paintConsensus(market);
     paintTimeline(market);
     paintGates(market);
@@ -426,6 +441,15 @@ export function createDetailView(ctx: AppContext): DetailView {
     const config = ctx.getConfig();
     const draft: BetDraft | null = ctx.getDraft();
     const prefs = ctx.getPrefs();
+    const preferredOutcome =
+      draft && draft.marketId === market.id
+        ? draft.outcomeId
+        : prefs.lastOutcomeId;
+    selectedOutcomeId = market.outcomes.some(
+      (outcome) => outcome.id === preferredOutcome
+    )
+      ? preferredOutcome
+      : market.outcomes[0]?.id ?? null;
     let confidence = clampInteger(prefs.confidence, -100, 100);
     let amount = prefs.amount ?? config.betMin;
     let restored = false;
@@ -460,15 +484,14 @@ export function createDetailView(ctx: AppContext): DetailView {
       draftTimer = null;
       if (!current) return;
       const confidence = clampInteger(Number(slider.value), -100, 100);
-      const side = sideFor(confidence);
-      if (!side) {
+      if (!selectedOutcomeId) {
         ctx.setDraft(null);
         return;
       }
       const amount = Number(amountInput.value);
       ctx.setDraft({
         marketId: current.id,
-        side,
+        outcomeId: selectedOutcomeId,
         amount: Number.isSafeInteger(amount) && amount > 0 ? amount : null,
         confidence,
         updatedAt: Date.now(),
@@ -481,6 +504,7 @@ export function createDetailView(ctx: AppContext): DetailView {
     const amount = Number(amountInput.value);
     ctx.setPrefs({
       confidence,
+      lastOutcomeId: selectedOutcomeId,
       amount: Number.isSafeInteger(amount) && amount > 0 ? amount : null,
     });
   }
@@ -499,9 +523,9 @@ export function createDetailView(ctx: AppContext): DetailView {
     }
     const config = ctx.getConfig();
     const confidence = clampInteger(Number(slider.value), -100, 100);
-    const side = sideFor(confidence);
-    if (!side) {
-      setTransientHint(t("detail.needDirection"), "error");
+    const outcomeId = selectedOutcomeId;
+    if (!outcomeId) {
+      setTransientHint("请选择一个结果", "error");
       return;
     }
     const check = validateAmount(
@@ -519,7 +543,7 @@ export function createDetailView(ctx: AppContext): DetailView {
       return;
     }
 
-    const key = betIntentKey(market.id, side, check.amount, confidence);
+    const key = betIntentKey(market.id, outcomeId, check.amount, confidence);
     const clientRequestId = pendingBets.get(key) ?? createRequestId();
     pendingBets.set(key, clientRequestId);
 
@@ -532,7 +556,7 @@ export function createDetailView(ctx: AppContext): DetailView {
     try {
       const result = await ctx.api.placeBet({
         marketId: market.id,
-        side,
+        outcomeId,
         amount: check.amount,
         confidence,
         clientRequestId,
@@ -541,7 +565,12 @@ export function createDetailView(ctx: AppContext): DetailView {
       });
       const updated = result.marketFull
         ? { ...result.marketFull, participants: market.participants }
-        : applyPoolUpdate(market, result.market);
+        : applyOutcomePools(
+            market,
+            Object.fromEntries(
+              result.market.outcomes.map((outcome) => [outcome.id, outcome.pool])
+            )
+          );
       ctx.upsertMarket(updated);
       ctx.setMe({ ...me, chips: result.chips });
       if (draftTimer) {

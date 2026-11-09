@@ -97,44 +97,29 @@ export function createMarketsView(ctx: AppContext): MarketsView {
     const desc = el("p", "market-card__desc");
     desc.textContent = market.description;
 
-    const yes = impliedPercent(market.impliedYes);
-    const consensus = el("div", "consensus-mini");
-    const bar = el("div", "consensus-mini__bar");
-    const yesBar = el("span");
-    yesBar.style.width = `${yes}%`;
-    bar.append(yesBar);
-    const labels = el("div", "consensus-mini__labels");
-    const yesLabel = el("span");
-    yesLabel.append(
-      makeIcon("i-up"),
-      document.createTextNode(`${t("detail.sideYes")} `),
-      Object.assign(el("b"), { textContent: `${yes}%` })
-    );
-    const noLabel = el("span");
-    noLabel.append(
-      makeIcon("i-down"),
-      document.createTextNode(`${t("detail.sideNo")} `),
-      Object.assign(el("b"), { textContent: `${100 - yes}%` })
-    );
-    labels.append(yesLabel, noLabel);
-    consensus.append(bar, labels);
-
-    const quotes = el("dl", "market-card__quotes");
-    const yesChip = el("div", "quote-chip quote-chip--yes");
-    yesChip.append(
-      Object.assign(el("dt"), {
-        textContent: `${t("detail.multiplier")} · ${t("detail.sideYes")}`,
-      }),
-      Object.assign(el("dd"), { textContent: formatMultiplier(market.payoutYes) })
-    );
-    const noChip = el("div", "quote-chip quote-chip--no");
-    noChip.append(
-      Object.assign(el("dt"), {
-        textContent: `${t("detail.multiplier")} · ${t("detail.sideNo")}`,
-      }),
-      Object.assign(el("dd"), { textContent: formatMultiplier(market.payoutNo) })
-    );
-    quotes.append(yesChip, noChip);
+    const outcomes = el("div", "market-card__outcomes");
+    for (const outcome of market.outcomes.slice(0, 3)) {
+      const row = el("div", "market-card__outcome");
+      row.append(
+        el("span", "market-card__outcome-label", outcome.label),
+        Object.assign(el("b"), {
+          textContent: `${impliedPercent(outcome.implied)}%`,
+        }),
+        Object.assign(el("span", "market-card__outcome-payout"), {
+          textContent: formatMultiplier(outcome.payout),
+        })
+      );
+      outcomes.append(row);
+    }
+    if (market.outcomes.length > 3) {
+      outcomes.append(
+        el(
+          "span",
+          "market-card__outcome-more",
+          `共 ${market.outcomes.length} 个结果`
+        )
+      );
+    }
 
     const foot = el("footer", "market-card__foot");
     const pool = el("span");
@@ -163,7 +148,7 @@ export function createMarketsView(ctx: AppContext): MarketsView {
     }
     if (marks.childElementCount > 0) foot.append(marks);
 
-    card.append(head, title, desc, consensus, quotes, foot);
+    card.append(head, title, desc, outcomes, foot);
     return card;
   }
 
@@ -177,20 +162,18 @@ export function createMarketsView(ctx: AppContext): MarketsView {
         market.description,
         market.deadline,
         market.status,
-        market.outcome,
-        market.yesPool,
-        market.noPool,
-        market.seedYes,
-        market.seedNo,
-        market.yesShare,
-        market.impliedYes,
-        market.payoutYes,
-        market.payoutNo,
-        market.hitCount,
-        market.firstSeenAt,
+        market.totalPool,
+        market.winningOutcomeId,
         market.settledAt,
         market.settleReason,
         market.participants,
+        ...market.outcomes.map((outcome) => [
+          outcome.id,
+          outcome.pool,
+          outcome.seed,
+          outcome.implied,
+          outcome.payout,
+        ]),
       ])
     )}`;
     if (signature !== lastSignature) {

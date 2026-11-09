@@ -1,6 +1,6 @@
 export type Side = "yes" | "no";
-export type MarketStatus = "open" | "locked" | "settled" | "void";
-export type MarketOutcome = Side | "void";
+export type MarketStatus = "open" | "locked" | "settling" | "settled" | "void";
+export type SettleMode = "first_match" | "exclusive" | "manual";
 export type LeaderboardType = "assets" | "accuracy";
 
 export interface PublicConfig {
@@ -15,26 +15,31 @@ export interface PublicConfig {
   serverTime: number;
 }
 
+export interface Outcome {
+  id: string;
+  label: string;
+  pool: number;
+  seed: number;
+  implied: number;
+  payout: number;
+  /** Optional: the worker view reports watch progress per outcome. */
+  hitCount?: number;
+  firstSeenAt?: number | null;
+}
+
 export interface Market {
   id: string;
   title: string;
   description: string;
   deadline: number;
   status: MarketStatus;
-  outcome: MarketOutcome | null;
-  yesPool: number;
-  noPool: number;
-  seedYes: number;
-  seedNo: number;
-  yesShare: number;
-  impliedYes: number;
-  payoutYes: number;
-  payoutNo: number;
-  hitCount: number;
-  firstSeenAt: number | null;
+  settleMode: SettleMode;
+  fallbackOutcomeId: string | null;
+  winningOutcomeId: string | null;
+  totalPool: number;
+  outcomes: Outcome[];
   settledAt: number | null;
   settleReason: string | null;
-  /** Optional: the contract does not currently define this field. Shown when present. */
   participants?: number | null;
 }
 
@@ -89,7 +94,7 @@ export interface MyRank {
 
 export interface BetInput {
   marketId: string;
-  side: Side;
+  outcomeId: string;
   amount: number;
   confidence: number;
   clientRequestId: string;
@@ -102,11 +107,10 @@ export interface BetResult {
   chips: number;
   market: {
     id: string;
-    yesPool: number;
-    noPool: number;
-    impliedYes: number;
+    totalPool: number;
+    outcomes: Outcome[];
   };
-  /** Present when the server returns the full market view (current worker does). */
+  /** Present when the server returns the full market view. */
   marketFull?: Market;
 }
 
@@ -118,7 +122,8 @@ export interface Page<T> {
 export interface PositionRow {
   marketId: string;
   title: string | null;
-  side: Side;
+  outcomeId: string;
+  outcomeLabel: string;
   amount: number;
   status: string;
   payout: number;
@@ -129,7 +134,8 @@ export interface HistoryRow {
   id: string;
   marketId: string;
   title: string | null;
-  side: Side;
+  outcomeId: string;
+  outcomeLabel: string;
   amount: number;
   status: string;
   payout: number;
@@ -142,15 +148,15 @@ export type ToastTone = "info" | "success" | "error";
 export interface Prefs {
   tab: "markets" | "leaderboard" | "me";
   lastMarketId: string | null;
+  lastOutcomeId: string | null;
   confidence: number;
   amount: number | null;
-  /** The app is dark-only; the id is kept for forward-compatible preferences. */
   theme: string;
 }
 
 export interface BetDraft {
   marketId: string;
-  side: Side;
+  outcomeId: string;
   amount: number | null;
   confidence: number;
   updatedAt: number;

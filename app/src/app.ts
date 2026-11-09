@@ -63,6 +63,8 @@ function readPrefs(cache: ReturnType<typeof createCache>): Prefs {
     tab,
     lastMarketId:
       typeof value.lastMarketId === "string" ? value.lastMarketId : null,
+    lastOutcomeId:
+      typeof value.lastOutcomeId === "string" ? value.lastOutcomeId : null,
     confidence,
     amount: amount !== null && amount > 0 ? amount : null,
     theme: typeof value.theme === "string" ? value.theme : "abyss",
@@ -77,7 +79,8 @@ function readDraft(cache: ReturnType<typeof createCache>): BetDraft | null {
   const value = cached.value;
   if (
     typeof value.marketId !== "string" ||
-    (value.side !== "yes" && value.side !== "no")
+    typeof value.outcomeId !== "string" ||
+    value.outcomeId.length === 0
   ) {
     return null;
   }
@@ -88,7 +91,7 @@ function readDraft(cache: ReturnType<typeof createCache>): BetDraft | null {
       : null;
   return {
     marketId: value.marketId,
-    side: value.side,
+    outcomeId: value.outcomeId,
     amount,
     confidence,
     updatedAt:

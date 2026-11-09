@@ -7,8 +7,9 @@ import type {
   LeaderboardEntry,
   Market,
   MarketStatus,
+  Outcome,
   PositionRow,
-  Side,
+  SettleMode,
 } from "./types.ts";
 
 const SEASON = "2026-11";
@@ -30,54 +31,73 @@ export function demoConnection(): PlatformConnection {
   };
 }
 
+interface OutcomeSeed {
+  id: string;
+  label: string;
+  pool?: number;
+  seed?: number;
+  hitCount?: number;
+  firstSeenAt?: number | null;
+}
+
 interface MarketSeed {
   id: string;
   title: string;
   description: string;
   status: MarketStatus;
   deadline: number;
-  yesPool: number;
-  noPool: number;
-  seedYes?: number;
-  seedNo?: number;
-  outcome?: Market["outcome"];
-  hitCount?: number;
-  firstSeenAt?: number | null;
+  settleMode?: SettleMode;
+  fallbackOutcomeId?: string | null;
+  winningOutcomeId?: string | null;
+  outcomes: OutcomeSeed[];
   settledAt?: number | null;
   settleReason?: string | null;
   participants?: number;
 }
 
+/** 与 worker 的 marketView 同口径：totalPool = Σ(pool+seed)，implied/payout 由池子派生。 */
+function reprice(market: Market): void {
+  const total = market.outcomes.reduce(
+    (sum, outcome) => sum + outcome.pool + outcome.seed,
+    0
+  );
+  market.totalPool = total;
+  for (const outcome of market.outcomes) {
+    const base = outcome.pool + outcome.seed;
+    outcome.implied =
+      total === 0 ? 1 : Math.round((base / total) * 100) / 100;
+    outcome.payout = base === 0 ? 1 : Math.round((total / base) * 100) / 100;
+  }
+}
+
 function makeMarket(seed: MarketSeed): Market {
-  const seedYes = seed.seedYes ?? 5000;
-  const seedNo = seed.seedNo ?? 5000;
-  const total = seed.yesPool + seed.noPool + seedYes + seedNo;
-  const yesTotal = seed.yesPool + seedYes;
-  const noTotal = seed.noPool + seedNo;
-  return {
+  const outcomes: Outcome[] = seed.outcomes.map((outcome) => ({
+    id: outcome.id,
+    label: outcome.label,
+    pool: outcome.pool ?? 0,
+    seed: outcome.seed ?? 0,
+    implied: 0,
+    payout: 0,
+    hitCount: outcome.hitCount ?? 0,
+    firstSeenAt: outcome.firstSeenAt ?? null,
+  }));
+  const market: Market = {
     id: seed.id,
     title: seed.title,
     description: seed.description,
     deadline: seed.deadline,
     status: seed.status,
-    outcome: seed.outcome ?? null,
-    yesPool: seed.yesPool,
-    noPool: seed.noPool,
-    seedYes,
-    seedNo,
-    yesShare:
-      seed.yesPool + seed.noPool > 0
-        ? seed.yesPool / (seed.yesPool + seed.noPool)
-        : 0.5,
-    impliedYes: total > 0 ? yesTotal / total : 0.5,
-    payoutYes: Math.round((total / yesTotal) * 100) / 100,
-    payoutNo: Math.round((total / noTotal) * 100) / 100,
-    hitCount: seed.hitCount ?? 0,
-    firstSeenAt: seed.firstSeenAt ?? null,
+    settleMode: seed.settleMode ?? "exclusive",
+    fallbackOutcomeId: seed.fallbackOutcomeId ?? null,
+    winningOutcomeId: seed.winningOutcomeId ?? null,
+    totalPool: 0,
+    outcomes,
     settledAt: seed.settledAt ?? null,
     settleReason: seed.settleReason ?? null,
     participants: seed.participants,
   };
+  reprice(market);
+  return market;
 }
 
 const NAMES = [
@@ -115,89 +135,123 @@ export function createDemoTransport(
 
   const markets: Market[] = [
     makeMarket({
-      id: "m_v5_2026",
-      title: "V5 在 2026 年底前出现？",
-      description: "以 DeepSeek 官方 /models 的 name 字段为准，连续观察确认后结算。",
+      id: "m_v5_when",
+      title: "V5 什么时候发布？",
+      description: "以 DeepSeek 官方 /models 中首次出现 V5 的季度为准，连续观察确认后结算。",
       status: "open",
       deadline: deadlines.v5,
-      yesPool: 12_400,
-      noPool: 5_600,
+      fallbackOutcomeId: "never",
       participants: 184,
+      outcomes: [
+        { id: "2026q4", label: "2026 Q4", pool: 3_000, seed: 1_250 },
+        { id: "2027q1", label: "2027 Q1", pool: 1_800, seed: 1_200 },
+        { id: "2027q2", label: "2027 Q2", pool: 700, seed: 900 },
+        { id: "2027q3", label: "2027 Q3", pool: 300, seed: 600 },
+        { id: "2027q4", label: "2027 Q4", pool: 150, seed: 400 },
+        { id: "2028plus", label: "2028 及以后", pool: 0, seed: 300 },
+        { id: "never", label: "截止前未出现", pool: 0, seed: 200 },
+      ],
     }),
     makeMarket({
-      id: "m_context_2m",
-      title: "V5 的上下文窗口达到 2M？",
-      description: "按字段阈值比对 context_window，目标模型名称以官方清单为准。",
+      id: "m_v5_context",
+      title: "V5 的上下文档位落在哪里？",
+      description: "按 /models 中 V5 的 context_window 字段分档，取首个匹配模型。",
       status: "open",
       deadline: deadlines.context,
-      yesPool: 8_200,
-      noPool: 6_100,
+      fallbackOutcomeId: "unknown",
       participants: 126,
+      outcomes: [
+        { id: "lt_1m", label: "< 1M", pool: 200, seed: 800 },
+        { id: "1m_2m", label: "1M – 2M", pool: 2_600, seed: 1_500 },
+        { id: "2m_4m", label: "2M – 4M", pool: 600, seed: 900 },
+        { id: "gte_4m", label: "≥ 4M", pool: 120, seed: 300 },
+        { id: "unknown", label: "未公开", pool: 0, seed: 200 },
+      ],
     }),
     makeMarket({
-      id: "m_output_128k",
-      title: "输出上限提升到 128K？",
-      description: "官方模型清单中的输出上限字段达到或超过目标值。",
+      id: "m_v5_output",
+      title: "V5 的输出上限落在哪一档？",
+      description: "按官方模型清单中输出上限字段分档，达到或超过即计入上一档。",
       status: "open",
       deadline: deadlines.output,
-      yesPool: 4_200,
-      noPool: 3_800,
+      fallbackOutcomeId: "unknown",
       participants: 97,
-      hitCount: 1,
-      firstSeenAt: Date.now() - 4 * 3_600_000,
+      outcomes: [
+        {
+          id: "lt_128k",
+          label: "< 128K",
+          pool: 900,
+          seed: 700,
+          hitCount: 1,
+          firstSeenAt: Date.now() - 4 * 3_600_000,
+        },
+        { id: "128k_256k", label: "128K – 256K", pool: 1_500, seed: 1_300 },
+        { id: "256k_500k", label: "256K – 500K", pool: 300, seed: 800 },
+        { id: "gte_500k", label: "≥ 500K", pool: 100, seed: 400 },
+        { id: "unknown", label: "未公开", pool: 0, seed: 150 },
+      ],
     }),
     makeMarket({
       id: "m_v41_rename",
-      title: "V4 系列在 11 月更名？",
+      title: "V4 系列会在 11 月更名吗？",
       description: "官方模型清单中的名称发生变化，以连续两次观察为准。",
       status: "locked",
       deadline: deadlines.rename,
-      yesPool: 3_000,
-      noPool: 4_700,
       participants: 64,
+      outcomes: [
+        { id: "oct", label: "10 月已更名", pool: 300, seed: 400 },
+        { id: "nov", label: "11 月更名", pool: 1_100, seed: 900 },
+        { id: "no", label: "未更名", pool: 700, seed: 600 },
+      ],
     }),
     makeMarket({
       id: "m_native_multimodal",
-      title: "原生多模态进入 V5？",
+      title: "V5 是否原生支持多模态？",
       description: "模型卡片或官方说明中明确列出原生多模态能力。",
       status: "settled",
       deadline: deadlines.multimodal,
-      yesPool: 9_000,
-      noPool: 2_200,
-      outcome: "yes",
+      winningOutcomeId: "native",
       settledAt: Date.now() - 2 * DAY,
       settleReason: "condition",
       participants: 143,
+      outcomes: [
+        { id: "native", label: "原生多模态", pool: 2_400, seed: 900 },
+        { id: "partial", label: "仅图片输入", pool: 600, seed: 700 },
+        { id: "none", label: "不支持", pool: 200, seed: 400 },
+      ],
     }),
     makeMarket({
       id: "m_agent_api",
-      title: "开放智能体工具接口？",
+      title: "会开放智能体工具接口吗？",
       description: "官方 API 文档新增可机读的智能体工具调用字段。",
-      status: "settled",
+      status: "void",
       deadline: deadlines.agent,
-      yesPool: 0,
-      noPool: 1_800,
-      outcome: "void",
       settledAt: Date.now() - 5 * DAY,
       settleReason: "manual",
       participants: 21,
+      outcomes: [
+        { id: "tools", label: "新增工具接口", pool: 200, seed: 500 },
+        { id: "none", label: "未新增", pool: 100, seed: 500 },
+      ],
     }),
   ];
 
   const positions: PositionRow[] = [
     {
-      marketId: "m_v5_2026",
+      marketId: "m_v5_when",
       title: markets[0].title,
-      side: "yes",
+      outcomeId: "2027q1",
+      outcomeLabel: "2027 Q1",
       amount: 240,
       status: "open",
       payout: 0,
       createdAt: Date.now() - DAY,
     },
     {
-      marketId: "m_output_128k",
+      marketId: "m_v5_output",
       title: markets[2].title,
-      side: "yes",
+      outcomeId: "128k_256k",
+      outcomeLabel: "128K – 256K",
       amount: 160,
       status: "open",
       payout: 0,
@@ -210,7 +264,8 @@ export function createDemoTransport(
       id: "b_demo_1",
       marketId: "m_native_multimodal",
       title: markets[4].title,
-      side: "yes",
+      outcomeId: "native",
+      outcomeLabel: "原生多模态",
       amount: 200,
       status: "won",
       payout: 318,
@@ -221,7 +276,8 @@ export function createDemoTransport(
       id: "b_demo_2",
       marketId: "m_agent_api",
       title: markets[5].title,
-      side: "no",
+      outcomeId: "tools",
+      outcomeLabel: "新增工具接口",
       amount: 120,
       status: "refunded",
       payout: 120,
@@ -230,9 +286,10 @@ export function createDemoTransport(
     },
     {
       id: "b_demo_3",
-      marketId: "m_context_2m",
+      marketId: "m_v5_context",
       title: markets[1].title,
-      side: "no",
+      outcomeId: "gte_4m",
+      outcomeLabel: "≥ 4M",
       amount: 80,
       status: "lost",
       payout: 0,
@@ -243,7 +300,8 @@ export function createDemoTransport(
       id: "b_demo_4",
       marketId: "m_v41_rename",
       title: markets[3].title,
-      side: "yes",
+      outcomeId: "nov",
+      outcomeLabel: "11 月更名",
       amount: 60,
       status: "open",
       payout: 0,
@@ -293,20 +351,6 @@ export function createDemoTransport(
 
   function findMarket(id: string): Market | undefined {
     return markets.find((market) => market.id === id);
-  }
-
-  function reprice(market: Market): void {
-    const total =
-      market.yesPool + market.noPool + market.seedYes + market.seedNo;
-    market.impliedYes = total > 0 ? (market.yesPool + market.seedYes) / total : 0.5;
-    market.yesShare =
-      market.yesPool + market.noPool > 0
-        ? market.yesPool / (market.yesPool + market.noPool)
-        : 0.5;
-    market.payoutYes =
-      Math.round((total / (market.yesPool + market.seedYes)) * 100) / 100;
-    market.payoutNo =
-      Math.round((total / (market.noPool + market.seedNo)) * 100) / 100;
   }
 
   const delay = () =>
@@ -446,12 +490,12 @@ export function createDemoTransport(
       }
       case "placeBet": {
         const input = request.json as BetInput | undefined;
-        if (!input) {
+        if (!input || typeof input.outcomeId !== "string") {
           return {
             status: 400,
             body: {
               ok: false,
-              error: { code: "INVALID_AMOUNT", message: "" },
+              error: { code: "INVALID_REQUEST", message: "" },
             },
           };
         }
@@ -462,6 +506,18 @@ export function createDemoTransport(
             body: {
               ok: false,
               error: { code: "MARKET_CLOSED", message: "" },
+            },
+          };
+        }
+        const outcome = market.outcomes.find(
+          (item) => item.id === input.outcomeId
+        );
+        if (!outcome) {
+          return {
+            status: 400,
+            body: {
+              ok: false,
+              error: { code: "INVALID_OUTCOME", message: "" },
             },
           };
         }
@@ -485,15 +541,15 @@ export function createDemoTransport(
           };
         }
         chips -= input.amount;
-        if (input.side === "yes") market.yesPool += input.amount;
-        else market.noPool += input.amount;
+        outcome.pool += input.amount;
         reprice(market);
         betCounter += 1;
         const row: HistoryRow = {
           id: `b_demo_${betCounter + 10}`,
           marketId: market.id,
           title: market.title,
-          side: input.side as Side,
+          outcomeId: outcome.id,
+          outcomeLabel: outcome.label,
           amount: input.amount,
           status: "open",
           payout: 0,
@@ -501,24 +557,33 @@ export function createDemoTransport(
           season: SEASON,
         };
         history.unshift(row);
-        positions.unshift({
-          marketId: market.id,
-          title: market.title,
-          side: input.side,
-          amount: input.amount,
-          status: "open",
-          payout: 0,
-          createdAt: Date.now(),
-        });
+        const position = positions.find(
+          (item) =>
+            item.marketId === market.id && item.outcomeId === outcome.id
+        );
+        if (position) {
+          position.amount += input.amount;
+        } else {
+          positions.unshift({
+            marketId: market.id,
+            title: market.title,
+            outcomeId: outcome.id,
+            outcomeLabel: outcome.label,
+            amount: input.amount,
+            status: "open",
+            payout: 0,
+            createdAt: Date.now(),
+          });
+        }
         const result: BetResult = {
           betId: row.id,
           chips,
           market: {
             id: market.id,
-            yesPool: market.yesPool,
-            noPool: market.noPool,
-            impliedYes: market.impliedYes,
+            totalPool: market.totalPool,
+            outcomes: market.outcomes.map((item) => ({ ...item })),
           },
+          marketFull: { ...market, outcomes: market.outcomes.map((item) => ({ ...item })) },
         };
         return { status: 200, body: { ok: true, data: result } };
       }

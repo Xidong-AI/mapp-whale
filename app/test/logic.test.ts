@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   accuracyPercent,
-  applyPoolUpdate,
+  applyOutcomePools,
   betIntentKey,
   betLimit,
   currentSeason,
@@ -30,17 +30,14 @@ const base: Market = {
   description: "",
   deadline: 1_800_000_000_000,
   status: "open",
-  outcome: null,
-  yesPool: 1000,
-  noPool: 500,
-  seedYes: 500,
-  seedNo: 500,
-  yesShare: 2 / 3,
-  impliedYes: 0.6,
-  payoutYes: 2,
-  payoutNo: 2.666,
-  hitCount: 0,
-  firstSeenAt: null,
+  settleMode: "exclusive",
+  fallbackOutcomeId: null,
+  winningOutcomeId: null,
+  totalPool: 2000,
+  outcomes: [
+    { id: "a", label: "A", pool: 1000, seed: 500, implied: 0.75, payout: 1.33 },
+    { id: "b", label: "B", pool: 500, seed: 500, implied: 0.5, payout: 2 },
+  ],
   settledAt: null,
   settleReason: null,
 };
@@ -190,25 +187,21 @@ describe("market helpers", () => {
     ]);
   });
 
-  test("pool total counts only user pools", () => {
-    expect(marketPoolTotal(base)).toBe(1500);
+  test("pool total includes seeds", () => {
+    expect(marketPoolTotal(base)).toBe(2000);
   });
 
   test("pool updates recompute odds without touching identity", () => {
-    const updated = applyPoolUpdate(base, {
-      yesPool: 1200,
-      noPool: 500,
-      impliedYes: 0.62,
-    });
-    expect(updated.yesPool).toBe(1200);
-    expect(updated.impliedYes).toBe(0.62);
-    expect(updated.payoutYes).toBeCloseTo(1.59, 2);
-    expect(updated.payoutNo).toBeCloseTo(2.7, 2);
+    const updated = applyOutcomePools(base, { a: 1200 });
+    expect(updated.outcomes[0]!.pool).toBe(1200);
+    expect(updated.totalPool).toBe(2700);
+    expect(updated.outcomes[0]!.payout).toBeCloseTo(1.59, 2);
+    expect(updated.outcomes[1]!.payout).toBeCloseTo(2.7, 2);
   });
 
   test("request keys bind the exact intent", () => {
-    const first = betIntentKey("m1", "yes", 100, 50);
-    expect(first).toBe(betIntentKey("m1", "yes", 100, 50));
-    expect(first).not.toBe(betIntentKey("m1", "yes", 101, 50));
+    const first = betIntentKey("m1", "a", 100, 50);
+    expect(first).toBe(betIntentKey("m1", "a", 100, 50));
+    expect(first).not.toBe(betIntentKey("m1", "a", 101, 50));
   });
 });

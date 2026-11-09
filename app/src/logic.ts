@@ -1,4 +1,4 @@
-import type { Market, MarketStatus, Prefs, Side } from "./types.ts";
+import type { Market, MarketStatus, Outcome, Prefs, Side } from "./types.ts";
 
 export type Direction = -1 | 0 | 1;
 
@@ -159,28 +159,26 @@ export function formatConfidence(value: number): string {
   return "0";
 }
 
-export function applyPoolUpdate(
+export function applyOutcomePools(
   market: Market,
-  pools: { yesPool: number; noPool: number; impliedYes?: number }
+  pools: Record<string, number>
 ): Market {
-  const yesPool = Math.max(0, Math.floor(pools.yesPool));
-  const noPool = Math.max(0, Math.floor(pools.noPool));
-  const total = yesPool + noPool + market.seedYes + market.seedNo;
-  const yesTotal = yesPool + market.seedYes;
-  const noTotal = noPool + market.seedNo;
+  const outcomes = market.outcomes.map((outcome) => ({
+    ...outcome,
+    pool: Math.max(0, Math.floor(pools[outcome.id] ?? outcome.pool)),
+  }));
+  const total = outcomes.reduce((sum, outcome) => sum + outcome.pool + outcome.seed, 0);
   return {
     ...market,
-    yesPool,
-    noPool,
-    yesShare: yesPool + noPool > 0 ? yesPool / (yesPool + noPool) : 0.5,
-    impliedYes:
-      Number.isFinite(pools.impliedYes) && pools.impliedYes !== undefined
-        ? (pools.impliedYes as number)
-        : total > 0
-          ? yesTotal / total
-          : 0.5,
-    payoutYes: yesTotal > 0 ? Math.round((total / yesTotal) * 100) / 100 : 0,
-    payoutNo: noTotal > 0 ? Math.round((total / noTotal) * 100) / 100 : 0,
+    totalPool: total,
+    outcomes: outcomes.map((outcome) => {
+      const base = outcome.pool + outcome.seed;
+      return {
+        ...outcome,
+        implied: total > 0 ? base / total : 1 / Math.max(1, outcomes.length),
+        payout: base > 0 ? Math.round((total / base) * 100) / 100 : 1,
+      };
+    }),
   };
 }
 
@@ -322,8 +320,9 @@ export function seasonOptions(current: string, count = 6): string[] {
 const STATUS_PRIORITY: Record<MarketStatus, number> = {
   open: 0,
   locked: 1,
-  settled: 2,
-  void: 3,
+  settling: 2,
+  settled: 3,
+  void: 4,
 };
 
 export function sortMarkets(items: readonly Market[]): Market[] {
@@ -339,22 +338,82 @@ export function sortMarkets(items: readonly Market[]): Market[] {
 }
 
 export function marketPoolTotal(market: Market): number {
-  return Math.max(0, market.yesPool) + Math.max(0, market.noPool);
+  return Math.max(0, market.totalPool);
+}
+
+/** 可选的 outcome（排除 fallback 兜底项）；全为兜底时退回全部。 */
+export function selectableOutcomes(market: Market): Outcome[] {
+  const selectable = market.outcomes.filter(
+    (outcome) => outcome.id !== market.fallbackOutcomeId
+  );
+  return selectable.length > 0 ? selectable : market.outcomes;
+}
+
+/** 默认选中：第一个非 fallback 结果。 */
+export function defaultOutcomeId(market: Market): string | null {
+  return selectableOutcomes(market)[0]?.id ?? null;
+}
+
+export function outcomeById(
+  market: Market,
+  id: string | null | undefined
+): Outcome | null {
+  if (!id) return null;
+  return market.outcomes.find((outcome) => outcome.id === id) ?? null;
+}
+
+/** 按隐含概率降序取前 N 个结果（卡片摘要与共识面板）。 */
+export function topOutcomes(market: Market, count = 3): Outcome[] {
+  return [...market.outcomes]
+    .sort((left, right) => right.implied - left.implied)
+    .slice(0, Math.max(1, count));
+}
+
+/** 单个 outcome 在总池中的份额（0–1，含种子）。 */
+export function outcomeShare(market: Market, outcome: Outcome): number {
+  const total = market.outcomes.reduce(
+    (sum, item) => sum + Math.max(0, item.pool) + Math.max(0, item.seed),
+    0
+  );
+  if (total <= 0) {
+    return market.outcomes.length > 0 ? 1 / market.outcomes.length : 0;
+  }
+  return (Math.max(0, outcome.pool) + Math.max(0, outcome.seed)) / total;
+}
+
+export interface OutcomeProgress {
+  hitCount: number;
+  firstSeenAt: number | null;
+}
+
+/** 聚合各 outcome 的观察进度，供详情时间线使用。 */
+export function outcomeProgress(market: Market): OutcomeProgress {
+  let hitCount = 0;
+  let firstSeenAt: number | null = null;
+  for (const outcome of market.outcomes) {
+    if ((outcome.hitCount ?? 0) > 0) hitCount += 1;
+    const seen = outcome.firstSeenAt ?? null;
+    if (seen !== null && (firstSeenAt === null || seen < firstSeenAt)) {
+      firstSeenAt = seen;
+    }
+  }
+  return { hitCount, firstSeenAt };
 }
 
 export function betIntentKey(
   marketId: string,
-  side: Side,
+  outcomeId: string,
   amount: number,
   confidence: number
 ): string {
-  return `${marketId}|${side}|${amount}|${confidence}`;
+  return `${marketId}|${outcomeId}|${amount}|${confidence}`;
 }
 
 export function defaultPrefs(): Prefs {
   return {
     tab: "markets",
     lastMarketId: null,
+    lastOutcomeId: null,
     confidence: 0,
     amount: null,
     theme: "abyss",

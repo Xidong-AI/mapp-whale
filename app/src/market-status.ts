@@ -15,23 +15,23 @@ export function marketStatus(
   now: number
 ): MarketStatusView {
   if (market.status === "settled") {
-    if (market.outcome === "yes" || market.outcome === "no") {
+    const winner = market.outcomes.find(
+      (outcome) => outcome.id === market.winningOutcomeId
+    );
+    if (winner) {
       return {
-        tone: market.outcome,
+        tone: "yes",
         edge: "settled",
-        label: `${t("status.settled")} · ${t(
-          market.outcome === "yes" ? "status.outcomeYes" : "status.outcomeNo"
-        )}`,
+        label: `${t("status.settled")} · ${winner.label}`,
       };
     }
-    return {
-      tone: "void",
-      edge: "void",
-      label: market.outcome === "void" ? t("status.outcomeVoid") : t("status.settled"),
-    };
+    return { tone: "void", edge: "void", label: t("status.settled") };
   }
   if (market.status === "void") {
     return { tone: "void", edge: "void", label: t("status.void") };
+  }
+  if (market.status === "settling") {
+    return { tone: "locked", edge: "locked", label: t("status.settling") };
   }
   if (market.status === "locked" || market.deadline <= now) {
     return { tone: "locked", edge: "locked", label: t("status.locked") };
@@ -52,6 +52,9 @@ export function deadlineView(market: Market, now: number): DeadlineView {
       }),
       closed: true,
     };
+  }
+  if (market.status === "settling") {
+    return { text: t("markets.deadlineClosed"), closed: true };
   }
   const value = formatCountdown(market.deadline, now, true);
   if (value === "已截止") {
