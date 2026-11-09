@@ -169,7 +169,8 @@ export async function handlePublicLeaderboard(
   let items: { rank: number; displayName: string | null; chips?: number; accuracy?: number; samples?: number }[];
   if (type === 'assets') {
     const { results } = await env.DB.prepare(
-      'SELECT display_name, chips FROM users ORDER BY chips DESC, user_key ASC LIMIT ?',
+      // 排除沙箱用户（user_key 含 #sandbox#），不影响正常生产用户。
+      "SELECT display_name, chips FROM users WHERE user_key NOT LIKE '%#sandbox#%' ORDER BY chips DESC, user_key ASC LIMIT ?",
     )
       .bind(limit)
       .all<{ display_name: string | null; chips: number }>();
@@ -181,7 +182,7 @@ export async function handlePublicLeaderboard(
   } else {
     const { results } = await env.DB.prepare(
       'SELECT user_key, display_name, correct, total, peak_chips FROM season_stats ' +
-        'JOIN users USING (user_key) WHERE season = ? AND total >= ? ' +
+        "JOIN users USING (user_key) WHERE season = ? AND total >= ? AND user_key NOT LIKE '%#sandbox#%' " +
         'ORDER BY CAST(correct AS REAL) / total DESC, total DESC, user_key ASC LIMIT ?',
     )
       .bind(season, cfg.accuracy_min_samples, limit)

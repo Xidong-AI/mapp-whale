@@ -40,6 +40,7 @@ const STATUS_BY_CODE: Record<string, number> = {
   INVALID_CONFIDENCE: 400,
   INSUFFICIENT_CHIPS: 400,
   CONFLICT: 409,
+  SANDBOX_READONLY: 403,
 };
 
 function codeOf(e: unknown): { status: number; code: string } {
@@ -55,20 +56,26 @@ async function authenticate(request: Request, env: Env, url: URL): Promise<Platf
   if (!env.PLATFORM_AUDIENCE) {
     throw new Error('PLATFORM_AUDIENCE_MISSING');
   }
-  try {
-    return await verifyPlatformRequest({
-      authorization: request.headers.get('Authorization') ?? '',
-      issuer: env.PLATFORM_ISSUER,
-      audience: env.PLATFORM_AUDIENCE,
-      appId: env.PLATFORM_APP_ID,
-      scope: 'network.request',
-      method: request.method,
-      url: url.toString(),
-    });
-  } catch {
-    // 不区分具体失败原因，统一 401，不回显 token 信息。
-    throw new Error('UNAUTHORIZED');
+  // 依次尝试 production 与 sandbox channel，任一验签成功即返回 identity。
+  const channels = ['production', 'sandbox'] as const;
+  for (const channel of channels) {
+    try {
+      return await verifyPlatformRequest({
+        authorization: request.headers.get('Authorization') ?? '',
+        issuer: env.PLATFORM_ISSUER,
+        audience: env.PLATFORM_AUDIENCE,
+        appId: env.PLATFORM_APP_ID,
+        scope: 'network.request',
+        method: request.method,
+        url: url.toString(),
+        channel,
+      });
+    } catch {
+      // 尝试下一个 channel；全部失败时统一 401。
+    }
   }
+  // 不区分具体失败原因，统一 401，不回显 token 信息。
+  throw new Error('UNAUTHORIZED');
 }
 
 async function readJson(request: Request): Promise<Record<string, unknown>> {
@@ -148,7 +155,21 @@ async function route(
   const userRoute = userPaths[path];
   if (userRoute && request.method === userRoute[0]) {
     const identity = await authenticate(request, env, url);
-    const userKey = userKeyOf(identity);
+
+    // 沙箱只读：除 /admin 外，写方法一律 403（提审文档约定，不写正式彩池/余额/排行榜）。
+    if (
+      identity.channel === 'sandbox' &&
+      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) &&
+      !path.startsWith('/admin')
+    ) {
+      throw new Error('SANDBOX_READONLY');
+    }
+
+    // 沙箱身份隔离：iss 加 #sandbox 后缀，userKey 与生产用户天然隔离。
+    // 生产用户的 key 格式保持不变。
+    const sandboxedIss = identity.channel === 'sandbox' ? `${identity.iss}#sandbox` : identity.iss;
+
+    const userKey = userKeyOf({ ...identity, iss: sandboxedIss });
     const body = request.method === 'POST' ? await readJson(request) : {};
     const displayName = body['displayName'];
     switch (userRoute[1]) {
@@ -163,7 +184,7 @@ async function route(
       case 'rank':
         return okResponse(await handleRank(env, userKey, displayName, url, now), ctx);
       case 'bets':
-        return okResponse(await handlePlaceBet(env, identity.iss, identity.sub, displayName, body, now), ctx);
+        return okResponse(await handlePlaceBet(env, sandboxedIss, identity.sub, displayName, body, now), ctx);
     }
   }
 

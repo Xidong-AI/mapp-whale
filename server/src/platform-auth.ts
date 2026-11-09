@@ -207,6 +207,12 @@ async function resolveKeyViaJwks(
   return jwksState.keys.get(kid) ?? null;
 }
 
+/** 仅供测试注入 JWKS（生产环境走网络拉取，Bun 测试无法访问平台 JWKS 端点）。 */
+export function setJwksForTest(keys: Map<string, JsonWebKey>): void {
+  jwksState.keys = keys;
+  jwksState.fetchedAt = Date.now();
+}
+
 // ---- 验签主流程 ----
 
 export async function verifyPlatformRequest(opts: VerifyOptions): Promise<PlatformIdentity> {
