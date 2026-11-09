@@ -1,11 +1,18 @@
 // 下注校验与幂等（契约 v2 5 节 / 12 节）：outcomeId 归属校验、扣款、加池、幂等。
 import { describe, expect, test } from 'bun:test';
 import { validateBet, handlePlaceBet } from '../src/routes/bets';
-import { makeEnv } from './helpers/env';
+import { makeEnv, clearSeedMarkets } from './helpers/env';
 import { MemoryD1 } from './helpers/d1';
 import type { MarketRow, OutcomeRow } from '../src/types';
 
 const NOW = Date.now();
+
+/** 建独立测试环境：清掉 0004 种子市场。 */
+function makeIsolatedEnv() {
+  const made = makeEnv();
+  clearSeedMarkets(made.db);
+  return made;
+}
 
 async function seedMarket(db: MemoryD1, overrides: Partial<MarketRow> = {}): Promise<void> {
   await db.inner
@@ -76,7 +83,7 @@ describe('POST /bets（D1 集成）', () => {
   }
 
   test('下注成功：扣款、加 outcome 池、写流水', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a', 50);
     await seedOutcome(db, 'm1', 'b', 50, 1);
@@ -96,7 +103,7 @@ describe('POST /bets（D1 集成）', () => {
   });
 
   test('outcome 不属于市场：INVALID_OUTCOME', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await expect(place(env, { outcomeId: 'bogus' })).rejects.toThrow('INVALID_OUTCOME');
@@ -105,7 +112,7 @@ describe('POST /bets（D1 集成）', () => {
   });
 
   test('幂等：同 clientRequestId 返回原结果，不重复扣款', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     const r1 = (await place(env, {})) as { betId: string };
@@ -118,7 +125,7 @@ describe('POST /bets（D1 集成）', () => {
   });
 
   test('市场不存在 / 非开放 / 已截止', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await expect(place(env, {})).rejects.toThrow('NOT_FOUND');
     await seedMarket(db, { status: 'locked' });
     await seedOutcome(db, 'm1', 'a');
@@ -131,21 +138,21 @@ describe('POST /bets（D1 集成）', () => {
   });
 
   test('余额比例校验用服务端余额', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await expect(place(env, { amount: 501 })).rejects.toThrow('BET_TOO_LARGE');
   });
 
   test('最小额校验', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await expect(place(env, { amount: 5 })).rejects.toThrow('BET_TOO_SMALL');
   });
 
   test('身份取 (iss, sub)，不同用户互不干扰', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await seedOutcome(db, 'm1', 'b', 0, 1);
@@ -165,7 +172,7 @@ describe('POST /bets（D1 集成）', () => {
   });
 
   test('市场带 fallback outcome 也能下注（触发器允许）', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db, { fallback_outcome_id: 'never' } as Partial<MarketRow>);
     void db;
     void USER_KEY;
@@ -175,7 +182,7 @@ describe('POST /bets（D1 集成）', () => {
 describe('outcomes pool 累计', () => {
   test('同一 outcome 多笔下注累计 pool', async () => {
     const now = Date.now();
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await handlePlaceBet(env, ISS, '10001', null, { marketId: 'm1', outcomeId: 'a', amount: 100, confidence: 0, clientRequestId: 'r1' }, now);

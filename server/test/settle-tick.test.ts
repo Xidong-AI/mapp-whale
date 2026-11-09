@@ -1,13 +1,20 @@
 // settleTick 容错（多结果市场）：单个市场结算失败只记录，不阻塞后续市场；deadline 兜底结算。
 import { describe, expect, test } from 'bun:test';
 import { settleTick } from '../src/index';
-import { makeEnv } from './helpers/env';
+import { makeEnv, clearSeedMarkets } from './helpers/env';
 import { MemoryD1, type ShimStmtLike } from './helpers/d1';
 import type { Env } from '../src/types';
 
 const ISS = 'https://linux.do';
 const USER_KEY = `${ISS}#10001`;
 const NOW = Date.now();
+
+/** 建独立测试环境：清掉 0004 种子市场，避免污染分页/计数。 */
+function makeIsolatedEnv() {
+  const made = makeEnv();
+  clearSeedMarkets(made.db);
+  return made;
+}
 
 async function seedMarket(db: MemoryD1, id: string, deadline: number, settleMode = 'exclusive'): Promise<void> {
   await db.inner
@@ -92,7 +99,7 @@ function dbFailingAcquire(inner: MemoryD1, failingMarketId: string): Env['DB'] {
 
 describe('settleTick 单市场失败不阻塞', () => {
   test('坏市场抢占时抛错，后续市场仍被结算（deadline → fallback 退款）', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedUser(db, USER_KEY, 1000);
     // m_ok：过期无 fallback → void 退款（exclusive，零命中已截止，无 fallback → void）。
     await seedExpiredMarketWithBet(db, 'm_ok', USER_KEY, 'a', 100);
@@ -124,7 +131,7 @@ describe('settleTick 单市场失败不阻塞', () => {
   });
 
   test('deadline 到期有 fallback → 按 fallback 结算派奖', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedUser(db, USER_KEY, 1000);
     await seedMarket(db, 'm1', NOW + 86_400_000, 'exclusive');
     await db.inner.prepare("UPDATE markets SET fallback_outcome_id = 'a' WHERE id = 'm1'").run();
@@ -156,7 +163,7 @@ describe('settleTick 单市场失败不阻塞', () => {
   });
 
   test('models fetch 失败时直接返回，不抛异常', async () => {
-    const { env } = makeEnv();
+    const { env } = makeIsolatedEnv();
     const original = globalThis.fetch;
     globalThis.fetch = (() => Promise.reject(new Error('network down'))) as unknown as typeof fetch;
     try {
@@ -169,7 +176,7 @@ describe('settleTick 单市场失败不阻塞', () => {
   });
 
   test('连续 poll_confirmations 次命中触发 exclusive 自动结算', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedUser(db, USER_KEY, 1000);
     await seedMarket(db, 'm1', NOW + 86_400_000);
     // hit_count 已有 1 次历史命中；本轮 fetch 返回 V5 → 达到 2 次。

@@ -3,13 +3,20 @@ import { describe, expect, test } from 'bun:test';
 import { handlePublicMarkets } from '../src/routes/public';
 import { handlePositions } from '../src/routes/me';
 import { handlePlaceBet } from '../src/routes/bets';
-import { makeEnv } from './helpers/env';
+import { makeEnv, clearSeedMarkets } from './helpers/env';
 import { MemoryD1 } from './helpers/d1';
 
 const ISS = 'https://linux.do';
 const SUB = '10001';
 const USER_KEY = `${ISS}#${SUB}`;
 const NOW = Date.now();
+
+/** 建独立测试环境：清掉 0004 种子市场，避免污染分页。 */
+function makeIsolatedEnv() {
+  const made = makeEnv();
+  clearSeedMarkets(made.db);
+  return made;
+}
 
 async function seedMarket(db: MemoryD1, id: string, createdAt: number): Promise<void> {
   await db.inner
@@ -31,7 +38,7 @@ async function seedOutcome(db: MemoryD1, marketId: string, id: string, sortOrder
 
 describe('GET /public/markets 分页', () => {
   test('cursor 存在且不带 status：正常翻页不报 500', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db, 'm1', NOW);
     await seedMarket(db, 'm2', NOW + 1);
     await seedMarket(db, 'm3', NOW + 2);
@@ -54,7 +61,7 @@ describe('GET /public/markets 分页', () => {
   });
 
   test('cursor + status 组合仍正常', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db, 'm1', NOW);
     await db.inner.prepare("UPDATE markets SET status = 'settled', updated_at = ? WHERE id = 'm1'").run(NOW);
     await seedMarket(db, 'm2', NOW + 1);
@@ -67,7 +74,7 @@ describe('GET /public/markets 分页', () => {
   });
 
   test('市场视图含 outcomes 数组与 totalPool', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db, 'm1', NOW);
     await seedOutcome(db, 'm1', 'a');
     await seedOutcome(db, 'm1', 'b', 1);
@@ -99,7 +106,7 @@ describe('GET /me/positions 分页', () => {
   }
 
   test('同一 created_at 多个市场：第二页不丢数据、不重复', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     for (const id of ['m1', 'm2', 'm3']) {
       await seedMarket(db, id, NOW);
       await seedOutcome(db, id, 'a');
@@ -131,7 +138,7 @@ describe('GET /me/positions 分页', () => {
   });
 
   test('跨 created_at 翻页：按（组内最大下注时间，market_id）定位', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     for (const id of ['m1', 'm2', 'm3']) {
       await seedMarket(db, id, NOW);
       await seedOutcome(db, id, 'a');
@@ -155,7 +162,7 @@ describe('GET /me/positions 分页', () => {
   });
 
   test('组内多注聚合为一行：amount / payout 汇总正确', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db, 'm1', NOW);
     await seedOutcome(db, 'm1', 'a');
     await seedUserBets(env, ['m1'], NOW);
@@ -178,7 +185,7 @@ describe('GET /me/positions 分页', () => {
   });
 
   test('同市场不同 outcome 分行聚合', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db, 'm1', NOW);
     await seedOutcome(db, 'm1', 'a');
     await seedOutcome(db, 'm1', 'b', 1);
@@ -202,7 +209,7 @@ describe('GET /me/positions 分页', () => {
   });
 
   test('cursor 指向不存在的组：NOT_FOUND', async () => {
-    const { env } = makeEnv();
+    const { env } = makeIsolatedEnv();
     const url = new URL('https://whale.example.com/me/positions?cursor=missing');
     await expect(handlePositions(env, USER_KEY, null, url, NOW)).rejects.toThrow('NOT_FOUND');
   });

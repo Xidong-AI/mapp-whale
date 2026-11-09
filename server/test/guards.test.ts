@@ -6,7 +6,7 @@ import { handleClaim } from '../src/routes/me';
 import { handlePlaceBet } from '../src/routes/bets';
 import { handleAdminSettle } from '../src/routes/admin';
 import { settleMarketDb, acquireForSettlement, retryStuckSettling } from '../src/settle';
-import { makeEnv } from './helpers/env';
+import { makeEnv, clearSeedMarkets } from './helpers/env';
 import { MemoryD1 } from './helpers/d1';
 import type { MarketRow } from '../src/types';
 
@@ -14,6 +14,13 @@ const ISS = 'https://linux.do';
 const USER_KEY = `${ISS}#10001`;
 const USER_KEY2 = `${ISS}#10002`;
 const NOW = Date.now();
+
+/** 建独立测试环境：清掉 0004 种子市场。 */
+function makeIsolatedEnv() {
+  const made = makeEnv();
+  clearSeedMarkets(made.db);
+  return made;
+}
 
 async function seedMarket(
   db: MemoryD1,
@@ -85,7 +92,7 @@ describe('迁移触发器', () => {
   });
 
   test('触发器：users.chips 不允许为负', async () => {
-    const { db } = makeEnv();
+    const { db } = makeIsolatedEnv();
     await seedUser(db, USER_KEY, 50);
     expect(() =>
       db.prepare('UPDATE users SET chips = chips - 100 WHERE user_key = ?').bind(USER_KEY).run(),
@@ -93,7 +100,7 @@ describe('迁移触发器', () => {
   });
 
   test('触发器：市场非 open 或已过期禁止下注', async () => {
-    const { db } = makeEnv();
+    const { db } = makeIsolatedEnv();
     await seedUser(db, USER_KEY, 1000);
     await seedMarket(db, { status: 'locked' });
     await seedOutcome(db, 'm1', 'a');
@@ -107,7 +114,7 @@ describe('迁移触发器', () => {
   });
 
   test('触发器：outcome 不属于该市场时拒绝下注', async () => {
-    const { db } = makeEnv();
+    const { db } = makeIsolatedEnv();
     await seedUser(db, USER_KEY, 1000);
     await seedMarket(db);
     // m1 只有 outcome 'a'；插 outcome 'zz' 的注单应被触发器拒绝。
@@ -118,7 +125,7 @@ describe('迁移触发器', () => {
 
 describe('POST /bets 原子回滚', () => {
   test('余额不足：注单、池子、流水、赛季统计都不落库', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await seedUser(db, USER_KEY, 30);
@@ -139,7 +146,7 @@ describe('POST /bets 原子回滚', () => {
   });
 
   test('市场已截止：池子更新带守卫不生效', async () => {
-    const { db } = makeEnv();
+    const { db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     // 池子更新本身没有状态守卫（守卫在 bets 插入触发器上），这里验证 outcomes 更新可直接执行。
@@ -152,7 +159,7 @@ describe('POST /bets 原子回滚', () => {
 
 describe('POST /me/claim 并发幂等', () => {
   test('并发两次调用只发放一次', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     const [r1, r2] = await Promise.all([
       handleClaim(env, USER_KEY, null, NOW) as Promise<{ claimed: boolean; chips: number }>,
       handleClaim(env, USER_KEY, null, NOW) as Promise<{ claimed: boolean; chips: number }>,
@@ -172,7 +179,7 @@ describe('POST /me/claim 并发幂等', () => {
 
 describe('结算两阶段抢占（多结果）', () => {
   test('并发两次 settle 同一市场，只派奖一次', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await seedOutcome(db, 'm1', 'b', 0, 1);
@@ -201,7 +208,7 @@ describe('结算两阶段抢占（多结果）', () => {
   });
 
   test('settling 重试不重复派奖（settleMarketDb 二次调用安全）', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await seedUser(db, USER_KEY, 1000);
@@ -222,7 +229,7 @@ describe('结算两阶段抢占（多结果）', () => {
   });
 
   test('cron 对卡在 settling 的市场幂等重试，不重复派奖', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     // 先建未来市场、插注单，再改 deadline 为已过期（触发器要求插入时市场未过期）。
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
@@ -250,7 +257,7 @@ describe('结算两阶段抢占（多结果）', () => {
   });
 
   test('cron 重试：settling 且无赢家记录且已过期 → void 退款', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await seedUser(db, USER_KEY, 1000);

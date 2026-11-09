@@ -12,6 +12,13 @@ const NOW = Date.now();
 
 const V5_MODEL: ModelRow = { id: '1', name: 'DeepSeek-V5', context_window: 1_500_000 };
 
+/** 建独立测试环境：清掉 0004 种子市场，避免污染分页/计数。 */
+function makeIsolatedEnv() {
+  const made = makeEnv();
+  clearSeedMarkets(made.db);
+  return made;
+}
+
 async function seedMarket(
   db: MemoryD1,
   overrides: Partial<MarketRow> = {},
@@ -84,7 +91,7 @@ describe('evaluateConditionJson', () => {
 
 describe('updateOutcomeHits', () => {
   test('命中累计 hit_count、记录 first_seen_at、达标进入 validHits', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a', '{"kind":"name_regex","regex":"DeepSeek[- ]?V5","flags":"i"}', { hitCount: 1 });
     await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1 });
@@ -100,7 +107,7 @@ describe('updateOutcomeHits', () => {
   });
 
   test('未命中：hit_count 清零；first_seen_at 保留', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     const seen = NOW - 1000;
     await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { hitCount: 3 });
@@ -115,7 +122,7 @@ describe('updateOutcomeHits', () => {
   });
 
   test('first_seen_between 窗口边界', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a', '{"kind":"first_seen_between","regex":"V5","flags":"i","start":100,"end":200}');
     const rows = await db.prepare("SELECT id, condition_json, hit_count, first_seen_at FROM outcomes WHERE market_id = 'm1'").all<{ id: string; condition_json: string; hit_count: number; first_seen_at: number | null }>();
@@ -135,7 +142,7 @@ describe('updateOutcomeHits', () => {
   });
 
   test('field_range selector first：取首个命中名字模型', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a', '{"kind":"field_range","targetNameRegex":"DeepSeek[- ]?V5","flags":"i","field":"context_window","min":1048576,"max":2097152,"selector":"first"}');
     const rows = await db.prepare("SELECT id, condition_json, hit_count, first_seen_at FROM outcomes WHERE market_id = 'm1'").all<{ id: string; condition_json: string; hit_count: number; first_seen_at: number | null }>();
@@ -145,9 +152,9 @@ describe('updateOutcomeHits', () => {
 
 describe('chooseAndSettle', () => {
   test('exclusive 恰一命中 → 派奖', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
-    await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { seed: 0, pool: 100 });
+    await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { seed: 0, pool: 0 });
     await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { seed: 0, sortOrder: 1, pool: 300 });
     await seedUser(db, USER_KEY, 1000);
     await seedBet(db, 'b1', USER_KEY, 'm1', 'a', 100);
@@ -164,7 +171,7 @@ describe('chooseAndSettle', () => {
   });
 
   test('exclusive 零命中未截止 → 等待不结算', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a', '{"kind":"never"}');
     await seedUser(db, USER_KEY, 1000);
@@ -177,11 +184,11 @@ describe('chooseAndSettle', () => {
   });
 
   test('exclusive 零命中已截止 → fallback 结算', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     // 先建未来市场、插注单，再改 deadline 为已过期（触发器要求插入时市场未过期）。
     await seedMarket(db, { fallback_outcome_id: 'b' });
     await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { pool: 100 });
-    await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1, pool: 100 });
+    await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1, pool: 0 });
     await seedUser(db, USER_KEY, 1000);
     await seedBet(db, 'b1', USER_KEY, 'm1', 'b', 100);
     await db.inner.prepare('UPDATE markets SET deadline = ? WHERE id = ?').run(NOW - 1, 'm1');
@@ -197,7 +204,7 @@ describe('chooseAndSettle', () => {
   });
 
   test('first_match：按 sort_order 第一个命中', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db, { settle_mode: 'first_match' });
     await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { sortOrder: 0, pool: 100 });
     await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1, pool: 100 });
@@ -214,7 +221,7 @@ describe('chooseAndSettle', () => {
   });
 
   test('manual 市场：有命中也不自动结算', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db, { settle_mode: 'manual' });
     await seedOutcome(db, 'm1', 'a', '{"kind":"never"}');
     await seedUser(db, USER_KEY, 1000);
@@ -227,7 +234,7 @@ describe('chooseAndSettle', () => {
   });
 
   test('winPool = 0 → void 全员退款', async () => {
-    const { env, db } = makeEnv();
+    const { env, db } = makeIsolatedEnv();
     await seedMarket(db);
     await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { seed: 100 });
     await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1, pool: 200 });
