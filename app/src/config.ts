@@ -2,7 +2,7 @@
  * Change API_ORIGIN here before building for a real deployment.
  * scripts/package.ts reads this exact constant and rewrites manifest.json.
  */
-export const API_ORIGIN = "https://mapp-whale.pj568.eu.org";
+export const API_ORIGIN = "https://whale-api.example.com";
 
 export const REQUEST_TIMEOUT_MS = 12_000;
 export const STORAGE_PREFIX = "whale:v1:";

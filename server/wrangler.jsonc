@@ -4,13 +4,6 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-09",
   "observability": { "enabled": true },
-  "vars": {
-    "PLATFORM_AUDIENCE": "https://mapp-whale.pj568.eu.org",
-    "ALLOWED_ORIGINS": "https://linux.do"
-  },
-  "routes": [
-    { "pattern": "mapp-whale.pj568.eu.org", "custom_domain": true }
-  ],
   "d1_databases": [
     {
       "binding": "DB",
