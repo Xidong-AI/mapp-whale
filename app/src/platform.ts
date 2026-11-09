@@ -115,12 +115,19 @@ function sdkTransport(sdk: MiniAppSDK): Transport {
         )
       : undefined;
     try {
-      const response = await sdk.http.request(endpoint, {
-        method: request.method,
-        query,
-        json: request.json as JsonValue | undefined,
-        timeoutMs: request.timeoutMs,
-      });
+    const options: {
+      method?: "GET" | "POST";
+      query?: Record<string, string>;
+      json?: JsonValue;
+      timeoutMs?: number;
+    } = {
+      method: request.method,
+      timeoutMs: request.timeoutMs,
+    };
+    if (query) options.query = query;
+    // SDK 会把显式的 json: undefined 当成非法 JSON，GET 请求不能带这个字段。
+    if (request.json !== undefined) options.json = request.json as JsonValue;
+    const response = await sdk.http.request(endpoint, options);
       debugLog("sdk response", { endpoint, status: response.status });
       return { status: response.status, body: response.body };
     } catch (error) {
