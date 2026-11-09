@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mapp-whale",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-09",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "whale",
+      "database_id": "<DATABASE_ID>",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": { "crons": ["*/10 * * * *", "10 0 1 * *"] }
+}
