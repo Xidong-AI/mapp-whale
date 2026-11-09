@@ -100,6 +100,13 @@ export async function startApp(): Promise<void> {
   document.documentElement.lang = "zh-CN";
   applyCopy(document);
 
+  const devParams = import.meta.env.DEV
+    ? new URLSearchParams(location.search)
+    : null;
+  const demoMode = import.meta.env.DEV && Boolean(devParams?.has("demo"));
+  const devView = devParams?.get("view") ?? null;
+  const devDetail = devParams?.get("detail") ?? null;
+
   const debugEnabled = new URLSearchParams(location.search).has("debug");
   const debugPanel = document.getElementById("debug-panel");
   const debugLines: string[] = [];
@@ -110,7 +117,8 @@ export async function startApp(): Promise<void> {
         `${new Date().toLocaleTimeString()} ${label}: ${describeDebug(value)}`
       );
       debugPanel.textContent = debugLines.slice(-40).join("\n");
-      if (debugEnabled || /error|failed|失败/i.test(label)) {
+      // demo/预览模式不自动展开，避免遮挡界面。
+      if (!demoMode && (debugEnabled || /error|failed|失败/i.test(label))) {
         debugPanel.hidden = false;
       }
     });
@@ -118,15 +126,9 @@ export async function startApp(): Promise<void> {
       href: location.href,
       hasMiniApp: Boolean((globalThis as { miniApp?: unknown }).miniApp),
       dev: import.meta.env.DEV,
+      demo: demoMode,
     });
   }
-
-  const devParams = import.meta.env.DEV
-    ? new URLSearchParams(location.search)
-    : null;
-  const demoMode = import.meta.env.DEV && Boolean(devParams?.has("demo"));
-  const devView = devParams?.get("view") ?? null;
-  const devDetail = devParams?.get("detail") ?? null;
 
   const connection: PlatformConnection = demoMode
     ? devParams?.get("guest") === "1"
@@ -138,7 +140,7 @@ export async function startApp(): Promise<void> {
     hasSDK: Boolean(connection.sdk),
     network: connection.sdk?.permissions.has("network.request") ?? false,
   });
-  if (debugPanel && (!connection.sdk || connection.mode === "error")) {
+  if (debugPanel && !demoMode && (!connection.sdk || connection.mode === "error")) {
     debugPanel.hidden = false;
   }
   const cache = createCache(browserStorage());

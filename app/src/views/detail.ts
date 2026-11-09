@@ -434,6 +434,15 @@ export function createDetailView(ctx: AppContext): DetailView {
       amount = draft.amount ?? amount;
       restored = true;
     }
+    // 开发期方便逐档检查立绘，生产构建不会读取这个参数。
+    if (import.meta.env.DEV) {
+      const fromUrl = Number(
+        new URLSearchParams(location.search).get("confidence")
+      );
+      if (Number.isFinite(fromUrl)) {
+        confidence = clampInteger(fromUrl, -100, 100);
+      }
+    }
     slider.value = String(confidence);
     const safeAmount =
       Number.isFinite(amount) && amount !== null

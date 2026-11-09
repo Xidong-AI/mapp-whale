@@ -137,10 +137,10 @@ button{cursor:pointer}
 .detail-main,.rank-row__who,.profile-card__who{min-width:0}
 .display--detail{font-size:clamp(24px,4.4vw,32px);margin-block:0 8px}
 .detail-desc{color:var(--muted);font-size:12.5px;line-height:1.75;max-width:60ch}
-.stage{display:flex;flex-direction:column;align-items:center;gap:6px;margin-block:16px 4px;padding:20px 14px 16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg)}
+.stage{display:flex;flex-direction:column;align-items:center;gap:4px;margin-block:12px 4px;padding:14px 12px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg)}
 
 /* 鲸鱼分阶段立绘：data-direction 决定配色（1 绿 / -1 砖红 / 0 墨），data-stage 决定显示哪张线稿 */
-.whale{--wa:var(--ink);--wa-soft:var(--bg);width:min(82%,330px)}
+.whale{--wa:var(--ink);--wa-soft:var(--bg);width:min(72%,250px)}
 .whale[data-direction="1"]{--wa:var(--accent);--wa-soft:var(--soft)}
 .whale[data-direction="-1"]{--wa:var(--danger);--wa-soft:var(--dsoft)}
 .whale-art{display:none;width:100%;height:auto}
@@ -156,8 +156,8 @@ button{cursor:pointer}
 .wa-bubble{stroke:var(--wa);stroke-width:2;opacity:.55}
 .stage__caption{display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
 .stage__index{font-size:10px;color:var(--muted)}
-.stage__name{font-size:24px;line-height:1.2;margin:0}
-.stage__hint{font-size:11px;color:var(--muted)}
+.stage__name{font-size:22px;line-height:1.2;margin:0}
+.stage__hint{font-size:10.5px;color:var(--muted)}
 
 /* 滑杆 */
 .slider-block{margin-block-start:15px}
@@ -314,6 +314,7 @@ button{cursor:pointer}
 
 /* 宽屏（680px 起） */
 @media (min-width:680px){
+.whale{width:min(58%,290px)}
 .market-grid,#markets-loading{grid-template-columns:repeat(2,minmax(0,1fr))}
 .detail-grid{grid-template-columns:minmax(0,1.08fr) minmax(286px,.92fr);gap:20px}
 .bet-card{position:sticky;top:118px}
@@ -329,6 +330,10 @@ button{cursor:pointer}
 
 /* 窄屏 */
 @media (max-width:560px){
+.quote-chip{padding:6px 8px}
+.quote-chip dt{font-size:9.5px}
+.quote-chip dd{font-size:13px}
+.market-card__quotes{gap:6px}
 .balance__label{display:none}
 .pill{max-width:108px}
 .section-head{align-items:flex-start}
@@ -343,6 +348,7 @@ button{cursor:pointer}
 }
 @media (max-width:380px){
 :root{--gutter:12px}
+.market-card__quotes{grid-template-columns:1fr}
 .brand__words em{display:none}
 .pill{max-width:88px;font-size:10px}
 .tabs button{padding-inline:9px}
