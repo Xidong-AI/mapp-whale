@@ -136,6 +136,30 @@ export async function handlePlaceBet(
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes('NEGATIVE_CHIPS')) throw new Error('INSUFFICIENT_CHIPS');
     if (msg.includes('MARKET_CLOSED')) throw new Error('MARKET_NOT_OPEN');
+    if (msg.includes('UNIQUE constraint failed')) {
+      // 并发同一 clientRequestId：batch 已回滚，重查原结果返回。
+      const again = await env.DB.prepare(
+        'SELECT * FROM bets WHERE user_key = ? AND client_request_id = ?',
+      )
+        .bind(userKey, input.clientRequestId)
+        .first<BetRow>();
+      if (again) {
+        const existingMarket = await env.DB.prepare('SELECT * FROM markets WHERE id = ?')
+          .bind(again.market_id)
+          .first<MarketRow>();
+        const existingUser = await env.DB.prepare('SELECT chips FROM users WHERE user_key = ?')
+          .bind(userKey)
+          .first<{ chips: number }>();
+        if (existingMarket && existingUser) {
+          return {
+            betId: again.id,
+            chips: existingUser.chips,
+            market: marketView(existingMarket),
+            idempotent: true,
+          };
+        }
+      }
+    }
     throw e;
   }
 

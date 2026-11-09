@@ -24,7 +24,9 @@ export type MarketCondition =
 
 function parseRegex(pattern: string, flags: string | undefined): RegExp | null {
   try {
-    const re = new RegExp(pattern, flags ?? '');
+    // 只允许无状态 flag；g/y 会保留 lastIndex，跨模型 test 时漏判。
+    const safeFlags = (flags ?? '').replace(/[^imsu]/g, '');
+    const re = new RegExp(pattern, safeFlags);
     // 防 ReDoS：限制长度与常见灾难嵌套（简单启发式即可）。
     if (pattern.length > 256 || /(.+)*[+*]\s*[+*]/.test(pattern)) return null;
     return re;
@@ -225,7 +227,13 @@ export async function settleMarketDb(
 
   // 赢家 / 退款：更新 bets、users.chips、ledger、season_stats
   // 带 status='open' 守卫：settling 重试时已 won/lost/refunded 的注单跳过。
-  const credit = (item: SettlementPayout, status: 'won' | 'refunded', ledgerReason: 'payout' | 'refund', correct: number) => {
+  const credit = (
+    item: SettlementPayout,
+    status: 'won' | 'refunded',
+    ledgerReason: 'payout' | 'refund',
+    correct: number,
+    totalDelta: number,
+  ) => {
     statements.push(
       env.DB.prepare("UPDATE bets SET status = ?, payout = ? WHERE id = ? AND status = 'open'").bind(
         status,
@@ -253,12 +261,13 @@ export async function settleMarketDb(
         endChips,
         payout: ledgerReason === 'payout' ? item.payout : 0,
         correct,
+        total: totalDelta,
       }),
     );
   };
 
-  for (const item of result.payouts) credit(item, 'won', 'payout', 1);
-  for (const item of result.refunds) credit(item, 'refunded', 'refund', 0);
+  for (const item of result.payouts) credit(item, 'won', 'payout', 1, 0);
+  for (const item of result.refunds) credit(item, 'refunded', 'refund', 0, -1);
 
   for (const betId of result.loserBetIds) {
     statements.push(
