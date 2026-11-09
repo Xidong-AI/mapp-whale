@@ -13,6 +13,7 @@ import {
 } from "./config.ts";
 import type { Transport, TransportRequest, TransportResponse } from "./api.ts";
 import { ApiError } from "./errors.ts";
+import { debugLog, describeDebug } from "./debug.ts";
 
 export type PlatformMode = "preview" | "guest" | "connected" | "error";
 
@@ -70,6 +71,7 @@ export async function connectPlatform(): Promise<PlatformConnection> {
     };
   } catch (error) {
     console.warn("[预言鲸] 社区连接失败", error);
+    debugLog("connect error", error);
     return { sdk, mode: "error", user: null, theme: null };
   }
 }
@@ -112,13 +114,19 @@ function sdkTransport(sdk: MiniAppSDK): Transport {
             .map(([key, value]) => [key, String(value)])
         )
       : undefined;
-    const response = await sdk.http.request(endpoint, {
-      method: request.method,
-      query,
-      json: request.json as JsonValue | undefined,
-      timeoutMs: request.timeoutMs,
-    });
-    return { status: response.status, body: response.body };
+    try {
+      const response = await sdk.http.request(endpoint, {
+        method: request.method,
+        query,
+        json: request.json as JsonValue | undefined,
+        timeoutMs: request.timeoutMs,
+      });
+      debugLog("sdk response", { endpoint, status: response.status });
+      return { status: response.status, body: response.body };
+    } catch (error) {
+      debugLog("sdk request error", { endpoint, error: describeDebug(error) });
+      throw error;
+    }
   };
 }
 
@@ -159,6 +167,9 @@ function fetchTransport(): Transport {
         signal: controller.signal,
       });
       return { status: response.status, body: await parseBody(response) };
+    } catch (error) {
+      debugLog("fetch error", { endpoint, error: describeDebug(error) });
+      throw error;
     } finally {
       clearTimeout(timer);
     }
@@ -167,11 +178,16 @@ function fetchTransport(): Transport {
 
 export function createTransport(connection: PlatformConnection): Transport {
   const sdk = connection.sdk;
-  if (!sdk) return fetchTransport();
+  if (!sdk) {
+    debugLog("transport", "fetch (sdk missing)");
+    return fetchTransport();
+  }
   if (!sdk.permissions.has("network.request")) {
+    debugLog("transport", "permission denied");
     return async () => {
       throw new ApiError("PERMISSION_DENIED");
     };
   }
+  debugLog("transport", "sdk");
   return sdkTransport(sdk);
 }

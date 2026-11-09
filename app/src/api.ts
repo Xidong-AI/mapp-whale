@@ -1,5 +1,6 @@
 import { ENDPOINTS, REQUEST_TIMEOUT_MS, type EndpointName } from "./config.ts";
 import { ApiError } from "./errors.ts";
+import { debugLog, describeDebug } from "./debug.ts";
 import type {
   BetInput,
   BetResult,
@@ -359,6 +360,7 @@ export function createApi(
         timeoutMs: request.timeoutMs ?? REQUEST_TIMEOUT_MS,
       });
     } catch (cause) {
+      debugLog("api error", { endpoint, error: describeDebug(cause) });
       throw toTransportError(cause);
     }
   }

@@ -5,6 +5,7 @@ import type { AppContext, Tab } from "./context.ts";
 import { applyCopy, t } from "./copy.ts";
 import { byId, el } from "./dom.ts";
 import { describeError } from "./errors.ts";
+import { debugLog, describeDebug, setDebugSink } from "./debug.ts";
 import {
   clampInteger,
   currentSeason,
@@ -99,6 +100,26 @@ export async function startApp(): Promise<void> {
   document.documentElement.lang = "zh-CN";
   applyCopy(document);
 
+  const debugEnabled = new URLSearchParams(location.search).has("debug");
+  if (debugEnabled) {
+    const panel = document.getElementById("debug-panel");
+    const lines: string[] = [];
+    if (panel) {
+      panel.hidden = false;
+      setDebugSink((label, value) => {
+        lines.push(
+          `${new Date().toLocaleTimeString()} ${label}: ${describeDebug(value)}`
+        );
+        panel.textContent = lines.slice(-40).join("\n");
+      });
+    }
+    debugLog("boot", {
+      href: location.href,
+      hasMiniApp: Boolean((globalThis as { miniApp?: unknown }).miniApp),
+      dev: import.meta.env.DEV,
+    });
+  }
+
   const devParams = import.meta.env.DEV
     ? new URLSearchParams(location.search)
     : null;
@@ -111,6 +132,11 @@ export async function startApp(): Promise<void> {
       ? { ...demoConnection(), mode: "guest", user: null }
       : demoConnection()
     : await connectPlatform();
+  debugLog("connection", {
+    mode: connection.mode,
+    hasSDK: Boolean(connection.sdk),
+    network: connection.sdk?.permissions.has("network.request") ?? false,
+  });
   const cache = createCache(browserStorage());
   const api = createApi(
     demoMode

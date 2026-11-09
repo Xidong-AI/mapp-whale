@@ -3049,3 +3049,22 @@ a {
     transform: translateY(6px) scale(0.99);
   }
 }
+
+.debug-panel {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 9999;
+  max-height: 45vh;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #2a4a5a;
+  border-radius: 8px;
+  background: rgba(3, 12, 20, 0.94);
+  color: #7ef2d0;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
