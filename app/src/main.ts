@@ -14,12 +14,10 @@ startApp()
   .catch((error: unknown) => {
     console.error("[预言鲸] 启动失败", error);
     debugLog("start error", error);
-    if (new URLSearchParams(location.search).has("debug")) {
-      const panel = document.getElementById("debug-panel");
-      if (panel) {
-        panel.hidden = false;
-        panel.textContent = `start error: ${describeDebug(error)}`;
-      }
+    const panel = document.getElementById("debug-panel");
+    if (panel) {
+      panel.hidden = false;
+      panel.textContent = `start error: ${describeDebug(error)}`;
     }
     if (root) root.dataset.boot = "error";
   });

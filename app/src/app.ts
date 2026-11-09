@@ -101,18 +101,19 @@ export async function startApp(): Promise<void> {
   applyCopy(document);
 
   const debugEnabled = new URLSearchParams(location.search).has("debug");
-  if (debugEnabled) {
-    const panel = document.getElementById("debug-panel");
-    const lines: string[] = [];
-    if (panel) {
-      panel.hidden = false;
-      setDebugSink((label, value) => {
-        lines.push(
-          `${new Date().toLocaleTimeString()} ${label}: ${describeDebug(value)}`
-        );
-        panel.textContent = lines.slice(-40).join("\n");
-      });
-    }
+  const debugPanel = document.getElementById("debug-panel");
+  const debugLines: string[] = [];
+  if (debugPanel) {
+    if (debugEnabled) debugPanel.hidden = false;
+    setDebugSink((label, value) => {
+      debugLines.push(
+        `${new Date().toLocaleTimeString()} ${label}: ${describeDebug(value)}`
+      );
+      debugPanel.textContent = debugLines.slice(-40).join("\n");
+      if (debugEnabled || /error|failed|失败/i.test(label)) {
+        debugPanel.hidden = false;
+      }
+    });
     debugLog("boot", {
       href: location.href,
       hasMiniApp: Boolean((globalThis as { miniApp?: unknown }).miniApp),
@@ -137,6 +138,9 @@ export async function startApp(): Promise<void> {
     hasSDK: Boolean(connection.sdk),
     network: connection.sdk?.permissions.has("network.request") ?? false,
   });
+  if (debugPanel && (!connection.sdk || connection.mode === "error")) {
+    debugPanel.hidden = false;
+  }
   const cache = createCache(browserStorage());
   const api = createApi(
     demoMode
