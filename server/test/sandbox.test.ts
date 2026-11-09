@@ -95,6 +95,21 @@ interface ResBody {
   error?: { code: string; message: string };
 }
 
+async function seedMarketWithOutcome(db: MemoryD1): Promise<void> {
+  await db.inner
+    .prepare(
+      "INSERT INTO markets (id, title, description, deadline, status, settle_mode, fallback_outcome_id, winning_outcome_id, settled_at, settle_reason, created_at, updated_at) " +
+        "VALUES ('m1', 'T', '', ?, 'open', 'exclusive', NULL, NULL, NULL, NULL, ?, ?)",
+    )
+    .run(NOW + 86_400_000, NOW, NOW);
+  await db.inner
+    .prepare(
+      "INSERT INTO outcomes (id, market_id, label, condition_json, pool, seed, sort_order, hit_count, first_seen_at, created_at) " +
+        "VALUES ('a', 'm1', 'A', '{\"kind\":\"never\"}', 0, 0, 0, 0, NULL, ?)",
+    )
+    .run(NOW);
+}
+
 describe('sandbox JWT 鉴权', () => {
   test('sandbox token 访问 GET /me 返回 200', async () => {
     const kp = await makeKeypair();
@@ -142,19 +157,14 @@ describe('sandbox 只读', () => {
     const kp = await makeKeypair();
     const { env, db } = makeEnv();
     setJwksForTest(new Map([[kp.kid, kp.jwk]]));
-    await db.inner
-      .prepare(
-        "INSERT INTO markets (id, title, description, condition_json, deadline, status, created_at, updated_at) " +
-          "VALUES ('m1', 'T', '', '{}', ?, 'open', ?, ?)",
-      )
-      .run(NOW + 86_400_000, NOW, NOW);
+    await seedMarketWithOutcome(db);
 
     const res = await worker.fetch(
       authRequest(
         'POST',
         '/bets',
         await signToken(kp, { channel: 'sandbox', htm: 'POST', htuPath: '/bets' }),
-        { marketId: 'm1', side: 'yes', amount: 10, confidence: 0, clientRequestId: 'sb-1' },
+        { marketId: 'm1', outcomeId: 'a', amount: 10, confidence: 0, clientRequestId: 'sb-1' },
       ),
       env,
     );

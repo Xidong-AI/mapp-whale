@@ -1,10 +1,10 @@
 // 预言鲸后端入口：fetch 路由分派 + Cron（结算 / 月度归档维护）。
 
-import type { Env, MarketRow } from './types';
+import type { Env, MarketRow, OutcomeRow } from './types';
 import { parseAllowedOrigins, corsHeaders, isPreflight, preflightResponse, okResponse, errorResponse, type CorsContext } from './cors';
 import { verifyPlatformRequest, userKeyOf, type PlatformIdentity } from './platform-auth';
 import { getConfig, shanghaiMonth, setConfigValue, writeAudit } from './db';
-import { evaluateCondition, settleMarketDb, acquireForSettlement, retryStuckSettling, type MarketCondition, type ModelInfo } from './settle';
+import { chooseAndSettle, retryStuckSettling, updateOutcomeHits, type ModelRow } from './settle';
 import { handlePublicConfig, handlePublicMarkets, handlePublicLeaderboard } from './routes/public';
 import { handleMe, handleClaim, handlePositions, handleHistory, handleRank } from './routes/me';
 import { handlePlaceBet } from './routes/bets';
@@ -32,6 +32,8 @@ const STATUS_BY_CODE: Record<string, number> = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   INVALID_REQUEST: 400,
+  INVALID_OUTCOME: 400,
+  INVALID_CONDITION: 400,
   INVALID_CONFIG: 400,
   MARKET_NOT_OPEN: 409,
   BET_TOO_SMALL: 400,
@@ -254,7 +256,7 @@ export async function settleTick(env: Env): Promise<{ settled: number; checked: 
     return { settled: 0, checked: 0 };
   }
 
-  let models: ModelInfo[] = [];
+  let models: ModelRow[] = [];
   try {
     const res = await fetch(cfg.models_url, {
       headers: { Authorization: `Bearer ${env.DEEPSEEK_API_KEY}` },
@@ -262,55 +264,39 @@ export async function settleTick(env: Env): Promise<{ settled: number; checked: 
     });
     if (!res.ok) throw new Error(`models fetch failed: ${res.status}`);
     const body = (await res.json()) as { data?: unknown };
-    models = Array.isArray(body.data) ? (body.data.filter((m) => typeof m === 'object' && m !== null) as ModelInfo[]) : [];
+    models = Array.isArray(body.data) ? (body.data.filter((m) => typeof m === 'object' && m !== null) as ModelRow[]) : [];
   } catch (e) {
     console.error(`[whale] models fetch failed: ${e instanceof Error ? e.message : 'unknown'}`);
     return { settled: 0, checked: 0 };
   }
 
   const { results: openMarkets } = await env.DB.prepare(
-    "SELECT * FROM markets WHERE status = 'open'",
+    "SELECT * FROM markets WHERE status IN ('open','locked')",
   ).all<MarketRow>();
 
   let settled = 0;
   for (const market of openMarkets) {
     // 单市场失败只记录，不阻塞后续市场。
     try {
-      // 截止未结算：结算为 no。
-      if (market.deadline <= now) {
-        if (await acquireForSettlement(env, market.id, now)) {
-          await settleMarketDb(env, market, 'no', 'deadline', cfg.season, now);
-          settled++;
-        }
-        continue;
-      }
+      const { results: outcomes } = await env.DB.prepare(
+        'SELECT * FROM outcomes WHERE market_id = ? ORDER BY sort_order',
+      )
+        .bind(market.id)
+        .all<OutcomeRow>();
+      const deadlinePassed = market.deadline <= now;
+      const validHits = await updateOutcomeHits(
+        env,
+        market.id,
+        outcomes,
+        models,
+        cfg.poll_confirmations,
+        now,
+      );
+      const anyMatched = validHits.length > 0;
+      if (!anyMatched && !deadlinePassed) continue;
 
-      let condition: MarketCondition;
-      try {
-        condition = JSON.parse(market.condition_json) as MarketCondition;
-      } catch {
-        continue;
-      }
-      const hit = evaluateCondition(condition, models);
-      if (hit) {
-        const newCount = market.hit_count + 1;
-        await env.DB.prepare(
-          'UPDATE markets SET hit_count = ?, first_seen_at = COALESCE(first_seen_at, ?), updated_at = ? WHERE id = ?',
-        )
-          .bind(newCount, now, now, market.id)
-          .run();
-        if (newCount >= cfg.poll_confirmations) {
-          const acquired = await acquireForSettlement(env, market.id, now);
-          if (acquired) {
-            market.hit_count = newCount;
-            await settleMarketDb(env, market, 'yes', 'auto', cfg.season, now);
-            settled++;
-          }
-        }
-      } else if (market.hit_count !== 0) {
-        await env.DB.prepare('UPDATE markets SET hit_count = 0, updated_at = ? WHERE id = ?')
-          .bind(now, market.id)
-          .run();
+      if (await chooseAndSettle(env, market, validHits, models, cfg.season, now)) {
+        settled++;
       }
     } catch (e) {
       console.error(`[whale] settle market ${market.id} failed: ${e instanceof Error ? e.message : 'unknown'}`);

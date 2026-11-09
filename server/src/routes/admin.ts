@@ -1,6 +1,6 @@
-// 管理接口（契约 7.3）：Bearer ADMIN_TOKEN 常量时间比较；所有写操作写 audit。
+// 管理接口（契约 v2 第 5 节）：Bearer ADMIN_TOKEN 常量时间比较；所有写操作写 audit。
 
-import type { Env, MarketRow } from '../types';
+import type { Env, MarketRow, OutcomeRow } from '../types';
 import {
   CONFIG_VALUE_KEYS,
   getConfig,
@@ -9,6 +9,7 @@ import {
   shanghaiMonth,
   type AppConfig,
 } from '../db';
+import { parseCondition, InvalidConditionError, type Condition } from '../conditions';
 import { settleMarketDb, acquireForSettlement } from '../settle';
 
 // ---- 常量时间比较（不依赖 Workers 专有的 crypto.subtle.timingSafeEqual，便于测试）----
@@ -39,7 +40,7 @@ export async function handleAdminGetConfig(env: Env, now: number): Promise<unkno
   return cfg;
 }
 
-/** 数值键的合法范围（契约第 6 节）：越界一律拒绝。 */
+/** 数值键的合法范围：越界一律拒绝。 */
 const NUMERIC_BOUNDS: Partial<Record<keyof AppConfig, (n: number) => boolean>> = {
   max_bet_ratio: (n) => n > 0 && n <= 1,
   bet_min: (n) => n >= 1,
@@ -85,37 +86,63 @@ export async function handleAdminPatchConfig(
 
 // ---- markets ----
 
-function validateCondition(condition: unknown): string {
-  if (typeof condition !== 'object' || condition === null) throw new Error('INVALID_REQUEST');
-  const c = condition as Record<string, unknown>;
-  if (c.kind === 'name_regex') {
-    if (typeof c.regex !== 'string') throw new Error('INVALID_REQUEST');
-  } else if (c.kind === 'field_threshold') {
-    if (
-      typeof c.targetNameRegex !== 'string' ||
-      typeof c.field !== 'string' ||
-      !['>=', '>', '<=', '<', '='].includes(String(c.op)) ||
-      typeof c.value !== 'number'
-    ) {
-      throw new Error('INVALID_REQUEST');
+const SETTLE_MODES = ['first_match', 'exclusive', 'manual'] as const;
+
+interface ParsedOutcomeInput {
+  id: string;
+  label: string;
+  seed: number;
+  conditionJson: string;
+}
+
+/** 校验并解析 outcomes 数组：id/label/seed/condition，condition 用 parseCondition 严格校验。 */
+function parseOutcomeInputs(raw: unknown, seedPerSide: number): ParsedOutcomeInput[] {
+  if (!Array.isArray(raw) || raw.length === 0) throw new Error('INVALID_REQUEST');
+  const seen = new Set<string>();
+  const parsed: ParsedOutcomeInput[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) throw new Error('INVALID_REQUEST');
+    const o = item as Record<string, unknown>;
+    const id = typeof o.id === 'string' && o.id.length > 0 && o.id.length <= 64 ? o.id : null;
+    const label = typeof o.label === 'string' && o.label.length > 0 && o.label.length <= 64 ? o.label : null;
+    if (!id || !label) throw new Error('INVALID_REQUEST');
+    if (seen.has(id)) throw new Error('INVALID_REQUEST'); // id 必须在市场内唯一
+    seen.add(id);
+    let condition: Condition;
+    try {
+      condition = parseCondition(o.condition);
+    } catch (e) {
+      if (e instanceof InvalidConditionError) throw new Error('INVALID_CONDITION');
+      throw e;
     }
-  } else {
-    throw new Error('INVALID_REQUEST');
+    const seed = typeof o.seed === 'number' && Number.isSafeInteger(o.seed) && o.seed >= 0 ? o.seed : seedPerSide;
+    parsed.push({ id, label, seed, conditionJson: JSON.stringify(condition) });
   }
-  return JSON.stringify(condition);
+  return parsed;
 }
 
 export async function handleAdminListMarkets(env: Env, url: URL, now: number): Promise<unknown> {
   await getConfig(env, now);
   const status = url.searchParams.get('status');
-  const statuses = ['open', 'locked', 'settled', 'void'];
+  const statuses = ['open', 'locked', 'settling', 'settled', 'void'];
   if (status !== null && !statuses.includes(status)) throw new Error('INVALID_REQUEST');
   const where = status ? 'WHERE status = ?' : '';
   const params = status ? [status] : [];
   const { results } = await env.DB.prepare(`SELECT * FROM markets ${where} ORDER BY created_at DESC LIMIT 500`)
     .bind(...params)
     .all<MarketRow>();
-  return { items: results };
+  const { results: outcomes } = await env.DB.prepare(
+    'SELECT * FROM outcomes ORDER BY market_id, sort_order',
+  ).all<OutcomeRow>();
+  const byMarket = new Map<string, OutcomeRow[]>();
+  for (const o of outcomes) {
+    const list = byMarket.get(o.market_id) ?? [];
+    list.push(o);
+    byMarket.set(o.market_id, list);
+  }
+  return {
+    items: results.map((m) => ({ ...m, outcomes: byMarket.get(m.id) ?? [] })),
+  };
 }
 
 export async function handleAdminCreateMarket(env: Env, body: unknown, now: number): Promise<unknown> {
@@ -126,22 +153,39 @@ export async function handleAdminCreateMarket(env: Env, body: unknown, now: numb
   if (!title || typeof b.deadline !== 'number' || !Number.isSafeInteger(b.deadline)) {
     throw new Error('INVALID_REQUEST');
   }
-  const conditionJson = validateCondition(b.condition);
+  const settleMode = typeof b.settleMode === 'string' && (SETTLE_MODES as readonly string[]).includes(b.settleMode)
+    ? b.settleMode
+    : 'exclusive';
+  const fallbackOutcomeId =
+    typeof b.fallbackOutcomeId === 'string' && b.fallbackOutcomeId.length > 0 ? b.fallbackOutcomeId : null;
   const description = typeof b.description === 'string' ? b.description : '';
-  const seedYes = typeof b.seedYes === 'number' && Number.isSafeInteger(b.seedYes) ? b.seedYes : 0;
-  const seedNo = typeof b.seedNo === 'number' && Number.isSafeInteger(b.seedNo) ? b.seedNo : 0;
   const cfg = await getConfig(env, now);
-  const finalSeedYes = seedYes || cfg.seed_per_side;
-  const finalSeedNo = seedNo || cfg.seed_per_side;
-  await env.DB.prepare(
-    'INSERT OR IGNORE INTO markets (id, title, description, condition_json, deadline, status, seed_yes, seed_no, created_at, updated_at) ' +
-      "VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)",
-  )
-    .bind(id, title, description, conditionJson, b.deadline, finalSeedYes, finalSeedNo, now, now)
-    .run();
+  const outcomes = parseOutcomeInputs(b.outcomes, cfg.seed_per_side);
+  // fallback 必须指向本市场某个 outcome。
+  if (fallbackOutcomeId && !outcomes.some((o) => o.id === fallbackOutcomeId)) {
+    throw new Error('INVALID_REQUEST');
+  }
+
+  const statements = [
+    env.DB.prepare(
+      'INSERT OR IGNORE INTO markets (id, title, description, deadline, status, settle_mode, fallback_outcome_id, winning_outcome_id, settled_at, settle_reason, created_at, updated_at) ' +
+        "VALUES (?, ?, ?, ?, 'open', ?, ?, NULL, NULL, NULL, ?, ?)",
+    ).bind(id, title, description, b.deadline, settleMode, fallbackOutcomeId, now, now),
+    ...outcomes.map((o, idx) =>
+      env.DB.prepare(
+        'INSERT OR IGNORE INTO outcomes (id, market_id, label, condition_json, pool, seed, sort_order, hit_count, first_seen_at, created_at) ' +
+          'VALUES (?, ?, ?, ?, 0, ?, ?, 0, NULL, ?)',
+      ).bind(o.id, id, o.label, o.conditionJson, o.seed, idx, now),
+    ),
+  ];
+  await env.DB.batch(statements);
+
   await writeAudit(env, 'market.create', 'admin', id, title, now);
   const row = await env.DB.prepare('SELECT * FROM markets WHERE id = ?').bind(id).first<MarketRow>();
-  return row;
+  const created = await env.DB.prepare('SELECT * FROM outcomes WHERE market_id = ? ORDER BY sort_order')
+    .bind(id)
+    .all<OutcomeRow>();
+  return { ...row, outcomes: created.results };
 }
 
 export async function handleAdminPatchMarket(
@@ -185,7 +229,11 @@ export async function handleAdminPatchMarket(
   params.push(now, id);
   await env.DB.prepare(`UPDATE markets SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
   await writeAudit(env, 'market.patch', 'admin', id, JSON.stringify(Object.keys(b)), now);
-  return env.DB.prepare('SELECT * FROM markets WHERE id = ?').bind(id).first<MarketRow>();
+  const row = await env.DB.prepare('SELECT * FROM markets WHERE id = ?').bind(id).first<MarketRow>();
+  const outcomes = await env.DB.prepare('SELECT * FROM outcomes WHERE market_id = ? ORDER BY sort_order')
+    .bind(id)
+    .all<OutcomeRow>();
+  return { ...row, outcomes: outcomes.results };
 }
 
 export async function handleAdminSettle(
@@ -196,12 +244,28 @@ export async function handleAdminSettle(
 ): Promise<unknown> {
   if (typeof body !== 'object' || body === null) throw new Error('INVALID_REQUEST');
   const b = body as Record<string, unknown>;
-  const outcome = b.outcome;
-  if (outcome !== 'yes' && outcome !== 'no' && outcome !== 'void') throw new Error('INVALID_REQUEST');
   const reason = typeof b.reason === 'string' && b.reason.length > 0 ? b.reason : 'manual';
+
+  // 两种形态：{ outcomeId: "..." } 或 { outcome: "void" }。
+  let voidSettle = false;
+  let outcomeId: string | null = null;
+  if (b.outcome === 'void') {
+    voidSettle = true;
+  } else if (typeof b.outcomeId === 'string' && b.outcomeId.length > 0) {
+    outcomeId = b.outcomeId;
+  } else {
+    throw new Error('INVALID_REQUEST');
+  }
 
   const market = await env.DB.prepare('SELECT * FROM markets WHERE id = ?').bind(id).first<MarketRow>();
   if (!market) throw new Error('NOT_FOUND');
+  // 非 void 结算：outcomeId 必须属于该市场。
+  if (!voidSettle) {
+    const outcome = await env.DB.prepare('SELECT id FROM outcomes WHERE market_id = ? AND id = ?')
+      .bind(id, outcomeId)
+      .first<{ id: string }>();
+    if (!outcome) throw new Error('INVALID_OUTCOME');
+  }
   // 状态机：open/locked 需抢占为 settling；settling 允许直接重试（卡住的市场）；其余拒绝。
   if (market.status === 'open' || market.status === 'locked') {
     const acquired = await acquireForSettlement(env, id, now);
@@ -211,7 +275,13 @@ export async function handleAdminSettle(
   }
 
   const cfg = await getConfig(env, now);
-  const summary = await settleMarketDb(env, market, outcome, reason, cfg.season, now);
+  const summary = await settleMarketDb(
+    env,
+    market,
+    { outcomeId: voidSettle ? null : outcomeId, void: voidSettle, reason },
+    cfg.season,
+    now,
+  );
   await writeAudit(env, 'market.settle', 'admin', id, JSON.stringify(summary), now);
   return summary;
 }
@@ -237,8 +307,11 @@ export async function handleAdminReopen(
 
   await env.DB.batch([
     env.DB.prepare(
-      "UPDATE markets SET status = 'open', outcome = NULL, settled_at = NULL, settle_reason = NULL, hit_count = 0, updated_at = ? WHERE id = ?",
+      "UPDATE markets SET status = 'open', winning_outcome_id = NULL, settled_at = NULL, settle_reason = NULL, updated_at = ? WHERE id = ?",
     ).bind(now, id),
+    env.DB.prepare(
+      "UPDATE outcomes SET hit_count = 0, first_seen_at = NULL WHERE market_id = ?",
+    ).bind(id),
     env.DB.prepare(
       "UPDATE bets SET status = 'open', payout = 0 WHERE market_id = ? AND status IN ('won', 'lost', 'refunded')",
     ).bind(id),
@@ -250,7 +323,11 @@ export async function handleAdminReopen(
       now,
     ),
   ]);
-  return env.DB.prepare('SELECT * FROM markets WHERE id = ?').bind(id).first<MarketRow>();
+  const row = await env.DB.prepare('SELECT * FROM markets WHERE id = ?').bind(id).first<MarketRow>();
+  const outcomes = await env.DB.prepare('SELECT * FROM outcomes WHERE market_id = ? ORDER BY sort_order')
+    .bind(id)
+    .all<OutcomeRow>();
+  return { ...row, outcomes: outcomes.results };
 }
 
 // ---- stats / maintenance / audit ----
@@ -261,9 +338,9 @@ export async function handleAdminStats(env: Env, now: number): Promise<unknown> 
     return r?.n ?? 0;
   };
   const pools = await env.DB.prepare(
-    'SELECT COALESCE(SUM(yes_pool), 0) AS yesPool, COALESCE(SUM(no_pool), 0) AS noPool, ' +
-      'COALESCE(SUM(seed_yes), 0) AS seedYes, COALESCE(SUM(seed_no), 0) AS seedNo FROM markets',
-  ).first<{ yesPool: number; noPool: number; seedYes: number; seedNo: number }>();
+    'SELECT COALESCE(SUM(pool + seed), 0) AS totalPool, COALESCE(SUM(pool), 0) AS userPool, ' +
+      'COALESCE(SUM(seed), 0) AS seedPool FROM outcomes',
+  ).first<{ totalPool: number; userPool: number; seedPool: number }>();
   const pending = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM markets WHERE status IN ('open', 'locked') AND deadline <= ?",
   )
@@ -282,11 +359,12 @@ export async function handleAdminStats(env: Env, now: number): Promise<unknown> 
   return {
     users: await count('users'),
     markets: await count('markets'),
+    outcomes: await count('outcomes'),
     bets: await count('bets'),
     ledger: await count('ledger'),
     audit: await count('audit'),
     seasonStats: await count('season_stats'),
-    pools: pools ?? { yesPool: 0, noPool: 0, seedYes: 0, seedNo: 0 },
+    pools: pools ?? { totalPool: 0, userPool: 0, seedPool: 0 },
     pendingSettlements: pending?.n ?? 0,
     storageBytes,
     season: shanghaiMonth(now),

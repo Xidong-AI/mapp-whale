@@ -1,173 +1,45 @@
-// 结算引擎（契约第 9 节）：纯计算函数与 D1 写入分离，便于单测。
+// 结算引擎（契约 v2 第 4 节）：纯函数复用 conditions.ts / multi-settle.ts，D1 写入与求值分离，便于单测。
 
-import type { Env, MarketRow } from './types';
+import type { Env, MarketRow, OutcomeRow } from './types';
 import { upsertSeasonStats, writeAudit } from './db';
+import { parseCondition, evaluateCondition, InvalidConditionError, type ModelRow } from './conditions';
+import {
+  chooseWinningOutcome,
+  computeMultiSettlement,
+  type BetInput,
+  type OutcomeInput,
+  type SettlementResult,
+} from './multi-settle';
+
+export type { ModelRow };
 
 // ---- 条件求值 ----
 
-export interface ModelInfo {
-  name?: string;
-  context_window?: number;
-  max_output_tokens?: number;
-  [key: string]: unknown;
-}
-
-export type MarketCondition =
-  | { kind: 'name_regex'; regex: string; flags?: string }
-  | {
-      kind: 'field_threshold';
-      targetNameRegex: string;
-      field: string;
-      op: '>=' | '>' | '<=' | '<' | '=';
-      value: number;
-    };
-
-function parseRegex(pattern: string, flags: string | undefined): RegExp | null {
+/** 纯函数：解析并求值 condition_json；非法条件视为未命中（不中断轮询）。 */
+export function evaluateConditionJson(conditionJson: string, models: ModelRow[]): boolean {
   try {
-    // 只允许无状态 flag；g/y 会保留 lastIndex，跨模型 test 时漏判。
-    const safeFlags = (flags ?? '').replace(/[^imsu]/g, '');
-    const re = new RegExp(pattern, safeFlags);
-    // 防 ReDoS：限制长度与常见灾难嵌套（简单启发式即可）。
-    if (pattern.length > 256 || /(.+)*[+*]\s*[+*]/.test(pattern)) return null;
-    return re;
-  } catch {
-    return null;
-  }
-}
-
-/** 纯函数：按 condition_json 对模型列表求值。 */
-export function evaluateCondition(condition: MarketCondition, models: ModelInfo[]): boolean {
-  switch (condition.kind) {
-    case 'name_regex': {
-      const re = parseRegex(condition.regex, condition.flags);
-      if (!re) return false;
-      return models.some((m) => typeof m.name === 'string' && re.test(m.name));
+    return evaluateCondition(parseCondition(JSON.parse(conditionJson)), { models });
+  } catch (e) {
+    if (!(e instanceof InvalidConditionError)) {
+      // JSON.parse 失败等也按未命中处理。
     }
-    case 'field_threshold': {
-      const re = parseRegex(condition.targetNameRegex, 'i');
-      if (!re) return false;
-      // 任一命中目标名的模型字段满足阈值即算命中，而不是只看 find 的第一个模型。
-      return models.some((m) => {
-        if (typeof m.name !== 'string' || !re.test(m.name)) return false;
-        const v = m[condition.field];
-        if (typeof v !== 'number' || !Number.isFinite(v)) return false;
-        switch (condition.op) {
-          case '>=':
-            return v >= condition.value;
-          case '>':
-            return v > condition.value;
-          case '<=':
-            return v <= condition.value;
-          case '<':
-            return v < condition.value;
-          case '=':
-            return v === condition.value;
-        }
-        return false;
-      });
-    }
+    return false;
   }
-}
-
-// ---- 派奖计算（纯函数）----
-
-export interface BetLike {
-  id: string;
-  user_key: string;
-  side: 'yes' | 'no';
-  amount: number;
-}
-
-export interface SettlementPayout {
-  betId: string;
-  userKey: string;
-  payout: number;
-}
-
-export interface SettlementResult {
-  /** winPool 为 0 时退款，outcome 记为 void。 */
-  outcome: 'yes' | 'no' | 'void';
-  refunds: SettlementPayout[];
-  payouts: SettlementPayout[];
-  loserBetIds: string[];
-  /** 向下取整后被销毁的余数（整数，非负）。 */
-  destroyedRemainder: number;
-  winPool: number;
-  losePool: number;
-  totalPool: number;
-}
-
-/**
- * 纯计算：`payout = floor(amount / (winPool + seedWin) * total)`，余数销毁；
- * 赢方用户池为 0 时全员退款（void）。
- */
-export function computeSettlement(
-  outcome: 'yes' | 'no' | 'void',
-  bets: BetLike[],
-  seedWin: number,
-  seedLose: number,
-): SettlementResult {
-  if (outcome === 'void') {
-    return {
-      outcome: 'void',
-      refunds: bets.map((b) => ({ betId: b.id, userKey: b.user_key, payout: b.amount })),
-      payouts: [],
-      loserBetIds: [],
-      destroyedRemainder: 0,
-      winPool: 0,
-      losePool: bets.filter((b) => b.side === 'no').reduce((s, b) => s + b.amount, 0),
-      totalPool: bets.reduce((s, b) => s + b.amount, 0) + seedWin + seedLose,
-    };
-  }
-
-  const winSide = outcome === 'yes' ? 'yes' : 'no';
-  const winBets = bets.filter((b) => b.side === winSide);
-  const loseBets = bets.filter((b) => b.side !== winSide);
-  const winPool = winBets.reduce((s, b) => s + b.amount, 0);
-  const losePool = loseBets.reduce((s, b) => s + b.amount, 0);
-  const total = winPool + losePool + seedWin + seedLose;
-
-  if (winPool <= 0) {
-    return {
-      outcome: 'void',
-      refunds: bets.map((b) => ({ betId: b.id, userKey: b.user_key, payout: b.amount })),
-      payouts: [],
-      loserBetIds: [],
-      destroyedRemainder: 0,
-      winPool,
-      losePool,
-      totalPool: total,
-    };
-  }
-
-  const payouts: SettlementPayout[] = winBets.map((b) => ({
-    betId: b.id,
-    userKey: b.user_key,
-    payout: Math.floor((b.amount / (winPool + seedWin)) * total),
-  }));
-  const paid = payouts.reduce((s, p) => s + p.payout, 0);
-  return {
-    outcome,
-    refunds: [],
-    payouts,
-    loserBetIds: loseBets.map((b) => b.id),
-    destroyedRemainder: total - paid,
-    winPool,
-    losePool,
-    totalPool: total,
-  };
 }
 
 // ---- D1 写入 ----
 
 export interface SettleOutcomeSummary {
-  outcome: 'yes' | 'no' | 'void';
+  outcome: string | null;
+  void: boolean;
+  reason: string;
   winners: number;
   refunded: number;
   losers: number;
   paidChips: number;
   refundedChips: number;
   destroyedRemainder: number;
+  totalPool: number;
 }
 
 /**
@@ -183,6 +55,13 @@ export async function acquireForSettlement(env: Env, marketId: string, now: numb
   return (res.meta.changes ?? 0) === 1;
 }
 
+export interface SettleChoices {
+  /** 指定赢家 outcome id；null 且 void=true 表示退款。 */
+  outcomeId: string | null;
+  void: boolean;
+  reason: string;
+}
+
 /**
  * 结算事务：写 bets.status/payout、users.chips、ledger、season_stats、markets、audit，
  * 全部在一个 D1 batch 内。只处理 status='open' 的注单；最终落 settled 要求市场处于
@@ -192,22 +71,38 @@ export async function acquireForSettlement(env: Env, marketId: string, now: numb
 export async function settleMarketDb(
   env: Env,
   market: MarketRow,
-  outcome: 'yes' | 'no' | 'void',
-  reason: string,
+  choices: SettleChoices,
   season: string,
   now: number,
 ): Promise<SettleOutcomeSummary> {
-  const seedWin = outcome === 'no' ? market.seed_no : market.seed_yes;
-  const seedLose = outcome === 'no' ? market.seed_yes : market.seed_no;
+  const outcomeId = choices.void ? null : choices.outcomeId;
 
-  const { results } = await env.DB.prepare(
-    "SELECT id, user_key, side, amount FROM bets WHERE market_id = ? AND status = 'open'",
+  const { results: bets } = await env.DB.prepare(
+    "SELECT id, user_key, outcome_id, amount FROM bets WHERE market_id = ? AND status = 'open'",
   )
     .bind(market.id)
-    .all<{ id: string; user_key: string; side: 'yes' | 'no'; amount: number }>();
+    .all<{ id: string; user_key: string; outcome_id: string; amount: number }>();
 
-  const result = computeSettlement(outcome, results, seedWin, seedLose);
-  const finalOutcome = result.outcome;
+  const { results: outcomeRows } = await env.DB.prepare(
+    'SELECT id, pool, seed FROM outcomes WHERE market_id = ?',
+  )
+    .bind(market.id)
+    .all<{ id: string; pool: number; seed: number }>();
+
+  const betInputs: BetInput[] = bets.map((b) => ({
+    betId: b.id,
+    userKey: b.user_key,
+    outcomeId: b.outcome_id,
+    amount: b.amount,
+  }));
+  const result: SettlementResult = computeMultiSettlement({
+    outcomes: outcomeRows,
+    bets: betInputs,
+    winningOutcomeId: outcomeId,
+  });
+
+  // void 时最终 winning_outcome_id 记为 null；派奖时记赢家 outcome。
+  const finalWinningId = result.void ? null : outcomeId;
 
   const statements: D1PreparedStatement[] = [];
 
@@ -228,7 +123,7 @@ export async function settleMarketDb(
   // 赢家 / 退款：更新 bets、users.chips、ledger、season_stats
   // 带 status='open' 守卫：settling 重试时已 won/lost/refunded 的注单跳过。
   const credit = (
-    item: SettlementPayout,
+    item: { betId: string; userKey: string; payout: number },
     status: 'won' | 'refunded',
     ledgerReason: 'payout' | 'refund',
     correct: number,
@@ -250,9 +145,9 @@ export async function settleMarketDb(
     );
     statements.push(
       env.DB.prepare(
-        'INSERT INTO ledger (user_key, market_id, bet_id, delta, reason, season, created_at) ' +
-          'VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).bind(item.userKey, market.id, item.betId, item.payout, ledgerReason, season, now),
+        'INSERT INTO ledger (user_key, market_id, outcome_id, bet_id, delta, reason, season, created_at) ' +
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).bind(item.userKey, market.id, outcomeId, item.betId, item.payout, ledgerReason, season, now),
     );
     const before = chipsBefore.get(item.userKey) ?? 0;
     const endChips = before + (credits.get(item.userKey) ?? 0);
@@ -269,17 +164,21 @@ export async function settleMarketDb(
   for (const item of result.payouts) credit(item, 'won', 'payout', 1, 0);
   for (const item of result.refunds) credit(item, 'refunded', 'refund', 0, -1);
 
-  for (const betId of result.loserBetIds) {
-    statements.push(
-      env.DB.prepare("UPDATE bets SET status = 'lost', payout = 0 WHERE id = ? AND status = 'open'").bind(betId),
-    );
+  // 非赢家：status='lost'。
+  const settledBetIds = new Set([...result.payouts, ...result.refunds].map((i) => i.betId));
+  for (const bet of bets) {
+    if (!settledBetIds.has(bet.id)) {
+      statements.push(
+        env.DB.prepare("UPDATE bets SET status = 'lost', payout = 0 WHERE id = ? AND status = 'open'").bind(bet.id),
+      );
+    }
   }
 
   statements.push(
     env.DB.prepare(
-      "UPDATE markets SET status = 'settled', outcome = ?, settled_at = ?, settle_reason = ?, updated_at = ? " +
+      "UPDATE markets SET status = 'settled', winning_outcome_id = ?, settled_at = ?, settle_reason = ?, updated_at = ? " +
         "WHERE id = ? AND status = 'settling'",
-    ).bind(finalOutcome, now, reason, now, market.id),
+    ).bind(finalWinningId, now, choices.reason, now, market.id),
   );
 
   statements.push(
@@ -290,12 +189,14 @@ export async function settleMarketDb(
       'system',
       market.id,
       JSON.stringify({
-        outcome: finalOutcome,
-        reason,
+        outcome: finalWinningId,
+        void: result.void,
+        reason: choices.reason,
         winners: result.payouts.length,
         refunded: result.refunds.length,
-        losers: result.loserBetIds.length,
-        destroyed: result.destroyedRemainder,
+        losers: bets.length - settledBetIds.size,
+        destroyed: result.totalPool - [...result.payouts, ...result.refunds].reduce((s, p) => s + p.payout, 0),
+        totalPool: result.totalPool,
       }),
       now,
     ),
@@ -310,20 +211,127 @@ export async function settleMarketDb(
   if (after?.status !== 'settled') throw new Error('CONFLICT');
 
   return {
-    outcome: finalOutcome,
+    outcome: finalWinningId,
+    void: result.void,
+    reason: choices.reason,
     winners: result.payouts.length,
     refunded: result.refunds.length,
-    losers: result.loserBetIds.length,
+    losers: bets.length - settledBetIds.size,
     paidChips: result.payouts.reduce((s, p) => s + p.payout, 0),
     refundedChips: result.refunds.reduce((s, r) => s + r.payout, 0),
-    destroyedRemainder: result.destroyedRemainder,
+    destroyedRemainder:
+      result.totalPool - [...result.payouts, ...result.refunds].reduce((s, p) => s + p.payout, 0),
+    totalPool: result.totalPool,
   };
 }
 
 /**
+ * 对 open/locked 市场按 outcome 求值：累计 hit_count、记录 first_seen_at。
+ * 返回每个市场的有效命中（连续 poll_confirmations 次命中）outcome id 列表。
+ */
+export async function updateOutcomeHits(
+  env: Env,
+  marketId: string,
+  conditionRows: { id: string; condition_json: string; hit_count: number; first_seen_at: number | null }[],
+  models: ModelRow[],
+  pollConfirmations: number,
+  now: number,
+): Promise<string[]> {
+  const validHits: string[] = [];
+  for (const row of conditionRows) {
+    let hit = false;
+    try {
+      hit = evaluateCondition(parseCondition(JSON.parse(row.condition_json)), { models });
+    } catch {
+      hit = false; // 非法条件视为未命中。
+    }
+    const newCount = hit ? row.hit_count + 1 : 0;
+    if (newCount !== row.hit_count || (hit && row.first_seen_at === null)) {
+      await env.DB.prepare(
+        'UPDATE outcomes SET hit_count = ?, first_seen_at = COALESCE(first_seen_at, ?) WHERE market_id = ? AND id = ?',
+      )
+        .bind(newCount, now, marketId, row.id)
+        .run();
+    }
+    if (hit && newCount >= pollConfirmations) validHits.push(row.id);
+  }
+  return validHits;
+}
+
+// 供 index.ts settleTick 使用的选择逻辑封装。
+export async function chooseAndSettle(
+  env: Env,
+  market: MarketRow,
+  validHits: string[],
+  models: ModelRow[],
+  season: string,
+  now: number,
+): Promise<boolean> {
+  const { results: outcomeRows } = await env.DB.prepare(
+    'SELECT id, pool, seed, hit_count, sort_order FROM outcomes WHERE market_id = ? ORDER BY sort_order',
+  )
+    .bind(market.id)
+    .all<{ id: string; pool: number; seed: number; hit_count: number; sort_order: number }>();
+  if (outcomeRows.length === 0) return false;
+
+  const outcomeInputs: OutcomeInput[] = outcomeRows.map((o) => ({
+    id: o.id,
+    pool: o.pool,
+    seed: o.seed,
+    matched: validHits.includes(o.id),
+  }));
+  const deadlinePassed = market.deadline <= now;
+  const chosen = chooseWinningOutcome({
+    mode: market.settle_mode,
+    outcomes: outcomeInputs,
+    fallbackOutcomeId: market.fallback_outcome_id,
+    deadlinePassed,
+  });
+
+  if (chosen.outcomeId === null && !chosen.void) {
+    return false; // 等待，不出结果。
+  }
+  if (chosen.outcomeId === null && chosen.void) {
+    // void：需要抢占后退款。
+    const acquired = await acquireForSettlement(env, market.id, now);
+    if (!acquired) return false;
+    await settleMarketDb(env, market, { outcomeId: null, void: true, reason: chosen.reason }, season, now);
+    return true;
+  }
+
+  // 确认指定赢家存在（fallback 引用缺失时 chooseWinningOutcome 已判 void，这里防越界）。
+  const exists = outcomeRows.some((o) => o.id === chosen.outcomeId);
+  if (!exists) {
+    const acquired = await acquireForSettlement(env, market.id, now);
+    if (!acquired) return false;
+    await settleMarketDb(
+      env,
+      market,
+      { outcomeId: null, void: true, reason: 'fallback_missing' },
+      season,
+      now,
+    );
+    return true;
+  }
+
+  const acquired = await acquireForSettlement(env, market.id, now);
+  if (!acquired) return false;
+  await settleMarketDb(
+    env,
+    market,
+    { outcomeId: chosen.outcomeId, void: false, reason: chosen.reason },
+    season,
+    now,
+  );
+  return true;
+}
+
+// 向后兼容导出：type OutcomeRow re-export 供路由复用。
+export type { OutcomeRow };
+
+/**
  * cron 重试：对 status='settling' 且 settled_at 为空或超过 5 分钟的市场重新结算。
- * 重新推断结果（hit_count 达标 → yes；已过期 → no）；settleMarketDb 只处理
- * status='open' 的注单，因此重试不会重复派奖。
+ * 重试时按当前数据重新推断赢家（结算守卫只处理 status='open' 的注单，不会重复派奖）。
  */
 export async function retryStuckSettling(
   env: Env,
@@ -338,10 +346,24 @@ export async function retryStuckSettling(
 
   let retried = 0;
   for (const market of stuck) {
-    const outcome = market.hit_count >= cfg.poll_confirmations ? 'yes' : market.deadline <= now ? 'no' : null;
-    if (!outcome) continue;
-    await settleMarketDb(env, market, outcome, 'retry', cfg.season, now);
-    retried++;
+    // 重试时以 fallback 推断（上一轮已选定赢家但写库失败的情形：以 winning_outcome_id 为准）。
+    if (market.winning_outcome_id) {
+      await settleMarketDb(
+        env,
+        market,
+        { outcomeId: market.winning_outcome_id, void: false, reason: 'retry' },
+        cfg.season,
+        now,
+      );
+      retried++;
+    } else if (market.deadline <= now) {
+      await settleMarketDb(env, market, { outcomeId: null, void: true, reason: 'retry_void' }, cfg.season, now);
+      retried++;
+    }
+    // 未过期且无赢家记录：等待下轮正常流程。
   }
   return retried;
 }
+
+// writeAudit 由 admin 路由使用；settle 内审计直接 INSERT，这里保留导出避免破坏现有 import。
+export { writeAudit };

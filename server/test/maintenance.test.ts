@@ -1,4 +1,4 @@
-// 归档维护（契约第 11 节）：season_stats 不翻倍、open 注单保留、betsDeleted 统计正确。
+// 归档维护（契约第 11 节）：season_stats 不翻倍、open 注单保留、betsDeleted 统计正确（多结果市场 schema）。
 import { describe, expect, test } from 'bun:test';
 import { runMaintenance } from '../src/routes/admin';
 import { makeEnv } from './helpers/env';
@@ -21,10 +21,16 @@ async function seedMarket(db: MemoryD1): Promise<void> {
   // trg_bets_market_open 要求市场 open 且未过期才允许插入注单。
   await db.inner
     .prepare(
-      "INSERT OR IGNORE INTO markets (id, title, description, condition_json, deadline, status, seed_yes, seed_no, created_at, updated_at) " +
-        "VALUES ('m1', 'T', '', '{}', ?, 'open', 0, 0, ?, ?)",
+      "INSERT OR IGNORE INTO markets (id, title, description, deadline, status, settle_mode, fallback_outcome_id, winning_outcome_id, settled_at, settle_reason, created_at, updated_at) " +
+        "VALUES ('m1', 'T', '', ?, 'open', 'exclusive', NULL, NULL, NULL, NULL, ?, ?)",
     )
     .run(NOW + 86_400_000, NOW, NOW);
+  await db.inner
+    .prepare(
+      "INSERT OR IGNORE INTO outcomes (id, market_id, label, condition_json, pool, seed, sort_order, hit_count, first_seen_at, created_at) " +
+        "VALUES ('a', 'm1', 'A', '{\"kind\":\"never\"}', 0, 0, 0, 0, NULL, ?)",
+    )
+    .run(NOW);
 }
 
 async function seedBet(
@@ -39,8 +45,8 @@ async function seedBet(
   await seedMarket(db);
   await db.inner
     .prepare(
-      "INSERT INTO bets (id, client_request_id, market_id, user_key, side, amount, confidence, status, payout, season, created_at) " +
-        "VALUES (?, ?, 'm1', ?, 'yes', ?, 0, ?, ?, ?, ?)",
+      "INSERT INTO bets (id, client_request_id, market_id, outcome_id, user_key, amount, confidence, status, payout, season, created_at) " +
+        "VALUES (?, ?, 'm1', 'a', ?, ?, 0, ?, ?, ?, ?)",
     )
     .run(id, `req_${id}`, userKey, amount, status, payout, season, NOW);
 }
@@ -120,10 +126,10 @@ describe('runMaintenance 归档', () => {
     const { env, db } = makeEnv();
     const old = NOW - 181 * 86_400_000;
     await db.inner
-      .prepare("INSERT INTO ledger (user_key, market_id, bet_id, delta, reason, season, created_at) VALUES (?, NULL, NULL, 1, 'claim', '2026-01', ?)")
+      .prepare("INSERT INTO ledger (user_key, market_id, outcome_id, bet_id, delta, reason, season, created_at) VALUES (?, NULL, NULL, NULL, 1, 'claim', '2026-01', ?)")
       .run(USER_KEY, old);
     await db.inner
-      .prepare("INSERT INTO ledger (user_key, market_id, bet_id, delta, reason, season, created_at) VALUES (?, NULL, NULL, 1, 'claim', '2026-01', ?)")
+      .prepare("INSERT INTO ledger (user_key, market_id, outcome_id, bet_id, delta, reason, season, created_at) VALUES (?, NULL, NULL, NULL, 1, 'claim', '2026-01', ?)")
       .run(USER_KEY, NOW);
     await db.inner
       .prepare("INSERT INTO audit (action, actor, target, detail, created_at) VALUES ('test', 'admin', NULL, NULL, ?)")

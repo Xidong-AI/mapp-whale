@@ -1,7 +1,18 @@
-// 公开接口（契约 7.1）：auth: none，不得泄露 user_key。
+// 公开接口（契约 v2 第 5 节）：auth: none，不得泄露 user_key。
 
-import type { Env, MarketRow } from '../types';
+import type { Env, MarketRow, OutcomeRow } from '../types';
 import { getConfig } from '../db';
+
+export interface OutcomeView {
+  id: string;
+  label: string;
+  pool: number;
+  seed: number;
+  implied: number;
+  payout: number;
+  hitCount: number;
+  firstSeenAt: number | null;
+}
 
 export interface MarketView {
   id: string;
@@ -9,52 +20,56 @@ export interface MarketView {
   description: string;
   deadline: number;
   status: string;
-  outcome: string | null;
-  yesPool: number;
-  noPool: number;
-  seedYes: number;
-  seedNo: number;
-  yesShare: number;
-  impliedYes: number;
-  payoutYes: number;
-  payoutNo: number;
-  hitCount: number;
-  firstSeenAt: number | null;
+  settleMode: string;
+  fallbackOutcomeId: string | null;
+  winningOutcomeId: string | null;
   settledAt: number | null;
   settleReason: string | null;
+  totalPool: number;
   participantCount?: number;
+  outcomes: OutcomeView[];
 }
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
-export function marketView(m: MarketRow, participantCount?: number): MarketView {
-  const yesBase = m.yes_pool + m.seed_yes;
-  const noBase = m.no_pool + m.seed_no;
-  const total = yesBase + noBase;
-  const userTotal = m.yes_pool + m.no_pool;
-  // 空池按 1.0 处理，避免除零。
-  const impliedYes = total === 0 ? 1.0 : yesBase / total;
-  const payoutYes = yesBase === 0 ? 1.0 : round2(total / yesBase);
-  const payoutNo = noBase === 0 ? 1.0 : round2(total / noBase);
+/** 市场视图：totalPool = Σ(pool+seed)；implied = (pool+seed)/totalPool；payout = totalPool/(pool+seed)；空池按 1.0。 */
+export function marketView(
+  m: MarketRow,
+  outcomes: OutcomeRow[],
+  participantCount?: number,
+): MarketView {
+  const total = outcomes.reduce((sum, o) => sum + o.pool + o.seed, 0);
+  const viewOutcomes = outcomes
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((o) => {
+      const base = o.pool + o.seed;
+      const implied = total === 0 ? 1.0 : base / total;
+      const payout = base === 0 ? 1.0 : total / base;
+      return {
+        id: o.id,
+        label: o.label,
+        pool: o.pool,
+        seed: o.seed,
+        implied: round2(implied),
+        payout: round2(payout),
+        hitCount: o.hit_count,
+        firstSeenAt: o.first_seen_at,
+      };
+    });
   return {
     id: m.id,
     title: m.title,
     description: m.description,
     deadline: m.deadline,
     status: m.status,
-    outcome: m.outcome,
-    yesPool: m.yes_pool,
-    noPool: m.no_pool,
-    seedYes: m.seed_yes,
-    seedNo: m.seed_no,
-    yesShare: userTotal === 0 ? 1.0 : round2(m.yes_pool / userTotal),
-    impliedYes: round2(impliedYes),
-    payoutYes,
-    payoutNo,
-    hitCount: m.hit_count,
-    firstSeenAt: m.first_seen_at,
+    settleMode: m.settle_mode,
+    fallbackOutcomeId: m.fallback_outcome_id,
+    winningOutcomeId: m.winning_outcome_id,
     settledAt: m.settled_at,
     settleReason: m.settle_reason,
+    totalPool: total,
+    outcomes: viewOutcomes,
     ...(participantCount === undefined ? {} : { participantCount }),
   };
 }
@@ -89,11 +104,12 @@ export async function handlePublicMarkets(
   if (id) {
     const row = await env.DB.prepare('SELECT * FROM markets WHERE id = ?').bind(id).first<MarketRow>();
     if (!row) throw new Error('NOT_FOUND');
+    const outcomes = await fetchOutcomes(env, [row.id]);
     const counts = await participantCounts(env, [row.id]);
-    return { items: [marketView(row, counts.get(row.id) ?? 0)], nextCursor: null };
+    return { items: [marketView(row, outcomes.get(row.id) ?? [], counts.get(row.id) ?? 0)], nextCursor: null };
   }
 
-  const statuses = ['open', 'locked', 'settled', 'void'];
+  const statuses = ['open', 'locked', 'settling', 'settled', 'void'];
   if (status !== null && !statuses.includes(status)) throw new Error('INVALID_REQUEST');
 
   let rows: MarketRow[];
@@ -113,8 +129,12 @@ export async function handlePublicMarkets(
 
   const nextCursor = rows.length > limit ? rows[limit - 1]!.id : null;
   const page = rows.slice(0, limit);
+  const outcomeMap = await fetchOutcomes(env, page.map((m) => m.id));
   const counts = await participantCounts(env, page.map((m) => m.id));
-  return { items: page.map((m) => marketView(m, counts.get(m.id) ?? 0)), nextCursor };
+  return {
+    items: page.map((m) => marketView(m, outcomeMap.get(m.id) ?? [], counts.get(m.id) ?? 0)),
+    nextCursor,
+  };
 }
 
 async function participantCounts(env: Env, ids: string[]): Promise<Map<string, number>> {
@@ -126,6 +146,24 @@ async function participantCounts(env: Env, ids: string[]): Promise<Map<string, n
     .bind(...ids)
     .all<{ market_id: string; n: number }>();
   return new Map(results.map((r) => [r.market_id, r.n]));
+}
+
+/** 按 market_id 批量取 outcomes，返回 market_id → 按 sort_order 排序的 outcomes。 */
+async function fetchOutcomes(env: Env, marketIds: string[]): Promise<Map<string, OutcomeRow[]>> {
+  const map = new Map<string, OutcomeRow[]>();
+  if (marketIds.length === 0) return map;
+  const placeholders = marketIds.map(() => '?').join(',');
+  const { results } = await env.DB.prepare(
+    `SELECT * FROM outcomes WHERE market_id IN (${placeholders}) ORDER BY market_id, sort_order`,
+  )
+    .bind(...marketIds)
+    .all<OutcomeRow>();
+  for (const row of results) {
+    const list = map.get(row.market_id) ?? [];
+    list.push(row);
+    map.set(row.market_id, list);
+  }
+  return map;
 }
 
 async function fetchMarkets(

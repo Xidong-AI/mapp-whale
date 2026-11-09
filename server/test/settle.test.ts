@@ -1,120 +1,239 @@
-// 结算引擎纯函数测试（契约第 9 节）：yes/no/void、赢方池为 0 退款、种子参与、余数销毁、多人按比例。
+// 结算引擎集成测试（契约 v2 第 4 节）：多 outcome 求值、chooseAndSettle、manual 市场等待、hit_count 累计。
 import { describe, expect, test } from 'bun:test';
-import { computeSettlement, evaluateCondition, type BetLike, type ModelInfo } from '../src/settle';
+import { updateOutcomeHits, chooseAndSettle, evaluateConditionJson } from '../src/settle';
+import { makeEnv } from './helpers/env';
+import { MemoryD1 } from './helpers/d1';
+import type { MarketRow } from '../src/types';
+import type { ModelRow } from '../src/conditions';
 
-const bet = (id: string, side: 'yes' | 'no', amount: number): BetLike => ({
-  id,
-  user_key: `u_${id}`,
-  side,
-  amount,
-});
+const ISS = 'https://linux.do';
+const USER_KEY = `${ISS}#10001`;
+const NOW = Date.now();
 
-describe('computeSettlement', () => {
-  test('yes 结算：按比例派奖，种子参与，余数销毁', () => {
-    const bets = [bet('b1', 'yes', 300), bet('b2', 'yes', 100), bet('b3', 'no', 400)];
-    // winPool=400, losePool=400, seedWin=0, seedLose=0 → total=800
-    const r = computeSettlement('yes', bets, 0, 0);
-    expect(r.outcome).toBe('yes');
-    expect(r.payouts).toHaveLength(2);
-    const b1 = r.payouts.find((p) => p.betId === 'b1')!;
-    const b2 = r.payouts.find((p) => p.betId === 'b2')!;
-    expect(b1.payout).toBe(Math.floor((300 / 400) * 800)); // 600
-    expect(b2.payout).toBe(Math.floor((100 / 400) * 800)); // 200
-    expect(r.destroyedRemainder).toBe(800 - 800);
-    expect(r.loserBetIds).toEqual(['b3']);
-  });
+const V5_MODEL: ModelRow = { id: '1', name: 'DeepSeek-V5', context_window: 1_500_000 };
 
-  test('余数销毁：除不尽时向下取整', () => {
-    const bets = [bet('b1', 'yes', 333), bet('b2', 'no', 100)];
-    // winPool=333, losePool=100, total=433 → 333/333*433 = 433
-    const r = computeSettlement('yes', bets, 0, 0);
-    expect(r.payouts[0]!.payout).toBe(433);
-    expect(r.destroyedRemainder).toBe(0);
-  });
+async function seedMarket(
+  db: MemoryD1,
+  overrides: Partial<MarketRow> = {},
+): Promise<void> {
+  await db.inner
+    .prepare(
+      "INSERT INTO markets (id, title, description, deadline, status, settle_mode, fallback_outcome_id, winning_outcome_id, settled_at, settle_reason, created_at, updated_at) " +
+        "VALUES (?, 'T', '', ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)",
+    )
+    .run(
+      overrides.id ?? 'm1',
+      overrides.deadline ?? NOW + 86_400_000,
+      overrides.status ?? 'open',
+      overrides.settle_mode ?? 'exclusive',
+      overrides.fallback_outcome_id ?? null,
+      NOW,
+      NOW,
+    );
+}
 
-  test('种子参与派奖分母', () => {
-    const bets = [bet('b1', 'yes', 100), bet('b2', 'no', 100)];
-    // winPool=100, seedWin=100, losePool=100, seedLose=100 → total=400
-    const r = computeSettlement('yes', bets, 100, 100);
-    expect(r.payouts[0]!.payout).toBe(Math.floor((100 / (100 + 100)) * 400)); // 200
-    expect(r.outcome).toBe('yes');
-  });
+async function seedOutcome(
+  db: MemoryD1,
+  marketId: string,
+  id: string,
+  conditionJson: string,
+  opts: { seed?: number; sortOrder?: number; hitCount?: number; pool?: number } = {},
+): Promise<void> {
+  await db.inner
+    .prepare(
+      "INSERT INTO outcomes (id, market_id, label, condition_json, pool, seed, sort_order, hit_count, first_seen_at, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
+    )
+    .run(id, marketId, `L_${id}`, conditionJson, opts.pool ?? 0, opts.seed ?? 0, opts.sortOrder ?? 0, opts.hitCount ?? 0, NOW);
+}
 
-  test('no 结算：no 方为赢方', () => {
-    const bets = [bet('b1', 'yes', 100), bet('b2', 'no', 100)];
-    const r = computeSettlement('no', bets, 0, 0);
-    expect(r.outcome).toBe('no');
-    expect(r.payouts[0]!.betId).toBe('b2');
-    expect(r.loserBetIds).toEqual(['b1']);
-  });
+async function seedUser(db: MemoryD1, userKey: string, chips: number): Promise<void> {
+  await db.inner
+    .prepare('INSERT INTO users (user_key, chips, created_at, updated_at) VALUES (?, ?, ?, ?)')
+    .run(userKey, chips, NOW, NOW);
+}
 
-  test('赢方池为 0：全员退款（void）', () => {
-    // outcome 为 yes，但所有用户都投了 no：赢方用户池为 0，全员退款。
-    const bets = [bet('b1', 'no', 100), bet('b2', 'no', 50)];
-    const r = computeSettlement('yes', bets, 500, 0);
-    expect(r.outcome).toBe('void');
-    expect(r.payouts).toHaveLength(0);
-    expect(r.refunds.map((x) => x.payout).sort((a, b) => a - b)).toEqual([50, 100]);
-    expect(r.loserBetIds).toHaveLength(0);
-    expect(r.destroyedRemainder).toBe(0);
-  });
+async function seedBet(
+  db: MemoryD1,
+  id: string,
+  userKey: string,
+  marketId: string,
+  outcomeId: string,
+  amount: number,
+): Promise<void> {
+  await db.inner
+    .prepare(
+      "INSERT INTO bets (id, client_request_id, market_id, outcome_id, user_key, amount, confidence, status, payout, season, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, 0, 'open', 0, '2026-11', ?)",
+    )
+    .run(id, `req_${id}`, marketId, outcomeId, userKey, amount, NOW);
+}
 
-  test('显式 void：全员退款', () => {
-    const bets = [bet('b1', 'yes', 100), bet('b2', 'no', 40)];
-    const r = computeSettlement('void', bets, 500, 500);
-    expect(r.outcome).toBe('void');
-    expect(r.refunds).toHaveLength(2);
-    expect(r.payouts).toHaveLength(0);
-  });
-
-  test('多人按比例：余数归属销毁', () => {
-    const bets = [bet('b1', 'yes', 1), bet('b2', 'yes', 1), bet('b3', 'yes', 1), bet('b4', 'no', 5)];
-    // winPool=3, losePool=5, total=8 → 每人 floor(8/3)=2，共 6，销毁 2
-    const r = computeSettlement('yes', bets, 0, 0);
-    expect(r.payouts.map((p) => p.payout)).toEqual([2, 2, 2]);
-    expect(r.destroyedRemainder).toBe(2);
-  });
-
-  test('空注单：不崩溃', () => {
-    const r = computeSettlement('yes', [], 0, 0);
-    expect(r.outcome).toBe('void');
-    expect(r.refunds).toHaveLength(0);
+describe('evaluateConditionJson', () => {
+  test('合法条件求值；非法 JSON / 非法条件返回 false 不抛异常', () => {
+    expect(evaluateConditionJson('{"kind":"name_regex","regex":"V5","flags":"i"}', [V5_MODEL])).toBe(true);
+    expect(evaluateConditionJson('not json', [V5_MODEL])).toBe(false);
+    expect(evaluateConditionJson('{"kind":"bogus"}', [V5_MODEL])).toBe(false);
+    expect(evaluateConditionJson('{"kind":"name_regex"}', [V5_MODEL])).toBe(false);
   });
 });
 
-describe('evaluateCondition', () => {
-  const models: ModelInfo[] = [
-    { name: 'deepseek-chat' },
-    { name: 'DeepSeek-V5-Preview', context_window: 2097152, max_output_tokens: 65536 },
-  ];
+describe('updateOutcomeHits', () => {
+  test('命中累计 hit_count、记录 first_seen_at、达标进入 validHits', async () => {
+    const { env, db } = makeEnv();
+    await seedMarket(db);
+    await seedOutcome(db, 'm1', 'a', '{"kind":"name_regex","regex":"DeepSeek[- ]?V5","flags":"i"}', { hitCount: 1 });
+    await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1 });
 
-  test('name_regex 命中', () => {
-    expect(evaluateCondition({ kind: 'name_regex', regex: 'DeepSeek[- ]?V5', flags: 'i' }, models)).toBe(true);
-    expect(evaluateCondition({ kind: 'name_regex', regex: 'DeepSeek[- ]?V9', flags: 'i' }, models)).toBe(false);
+    const rows = await db.prepare("SELECT id, condition_json, hit_count, first_seen_at FROM outcomes WHERE market_id = 'm1' ORDER BY sort_order").all<{ id: string; condition_json: string; hit_count: number; first_seen_at: number | null }>();
+    const hits = await updateOutcomeHits(env, 'm1', rows.results, [V5_MODEL], 2, NOW);
+    expect(hits).toEqual(['a']); // a 达到 2 次
+    const a = await db.prepare("SELECT hit_count, first_seen_at FROM outcomes WHERE market_id = 'm1' AND id = 'a'").first<{ hit_count: number; first_seen_at: number | null }>();
+    expect(a?.hit_count).toBe(2);
+    expect(a?.first_seen_at).toBe(NOW); // 首次记录
+    const b = await db.prepare("SELECT hit_count FROM outcomes WHERE market_id = 'm1' AND id = 'b'").first<{ hit_count: number }>();
+    expect(b?.hit_count).toBe(0);
   });
 
-  test('field_threshold：先找目标模型再比较字段', () => {
-    expect(
-      evaluateCondition(
-        { kind: 'field_threshold', targetNameRegex: 'DeepSeek[- ]?V5', field: 'context_window', op: '>=', value: 2097152 },
-        models,
-      ),
-    ).toBe(true);
-    expect(
-      evaluateCondition(
-        { kind: 'field_threshold', targetNameRegex: 'DeepSeek[- ]?V5', field: 'max_output_tokens', op: '>', value: 100000 },
-        models,
-      ),
-    ).toBe(false);
-    expect(
-      evaluateCondition(
-        { kind: 'field_threshold', targetNameRegex: 'DeepSeek[- ]?V9', field: 'context_window', op: '>=', value: 1 },
-        models,
-      ),
-    ).toBe(false);
+  test('未命中：hit_count 清零；first_seen_at 保留', async () => {
+    const { env, db } = makeEnv();
+    await seedMarket(db);
+    const seen = NOW - 1000;
+    await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { hitCount: 3 });
+    await db.inner.prepare("UPDATE outcomes SET first_seen_at = ? WHERE market_id = 'm1' AND id = 'a'").run(seen);
+
+    const rows = await db.prepare("SELECT id, condition_json, hit_count, first_seen_at FROM outcomes WHERE market_id = 'm1'").all<{ id: string; condition_json: string; hit_count: number; first_seen_at: number | null }>();
+    const hits = await updateOutcomeHits(env, 'm1', rows.results, [V5_MODEL], 2, NOW);
+    expect(hits).toEqual([]);
+    const a = await db.prepare("SELECT hit_count, first_seen_at FROM outcomes WHERE market_id = 'm1' AND id = 'a'").first<{ hit_count: number; first_seen_at: number | null }>();
+    expect(a?.hit_count).toBe(0);
+    expect(a?.first_seen_at).toBe(seen);
   });
 
-  test('非法正则不抛异常返回 false', () => {
-    expect(evaluateCondition({ kind: 'name_regex', regex: '(', flags: '' }, models)).toBe(false);
+  test('first_seen_between 窗口边界', async () => {
+    const { env, db } = makeEnv();
+    await seedMarket(db);
+    await seedOutcome(db, 'm1', 'a', '{"kind":"first_seen_between","regex":"V5","flags":"i","start":100,"end":200}');
+    const rows = await db.prepare("SELECT id, condition_json, hit_count, first_seen_at FROM outcomes WHERE market_id = 'm1'").all<{ id: string; condition_json: string; hit_count: number; first_seen_at: number | null }>();
+    // 首次观测：不在窗口 [100,200) → false
+    expect(await updateOutcomeHits(env, 'm1', rows.results, [V5_MODEL], 2, 99)).toEqual([]);
+    // 首次观测落在窗口内 → true（但 hit 1 < 2 不达标）
+    const hits = await updateOutcomeHits(env, 'm1', rows.results, [V5_MODEL], 2, 100);
+    expect(hits).toEqual([]);
+    expect((await db.prepare("SELECT hit_count FROM outcomes WHERE market_id = 'm1' AND id = 'a'").first<{ hit_count: number }>())?.hit_count).toBe(1);
+    // 二次观测 199 仍在窗口（end 不含 200）→ 达标
+    const rows2 = await db.prepare("SELECT id, condition_json, hit_count, first_seen_at FROM outcomes WHERE market_id = 'm1'").all<{ id: string; condition_json: string; hit_count: number; first_seen_at: number | null }>();
+    expect(await updateOutcomeHits(env, 'm1', rows2.results, [V5_MODEL], 2, 199)).toEqual(['a']);
+    // 二次观测 200 出窗 → 清零
+    await db.inner.prepare("UPDATE outcomes SET hit_count = 0 WHERE market_id = 'm1' AND id = 'a'").run();
+    const rows3 = await db.prepare("SELECT id, condition_json, hit_count, first_seen_at FROM outcomes WHERE market_id = 'm1'").all<{ id: string; condition_json: string; hit_count: number; first_seen_at: number | null }>();
+    expect(await updateOutcomeHits(env, 'm1', rows3.results, [V5_MODEL], 2, 200)).toEqual([]);
+  });
+
+  test('field_range selector first：取首个命中名字模型', async () => {
+    const { env, db } = makeEnv();
+    await seedMarket(db);
+    await seedOutcome(db, 'm1', 'a', '{"kind":"field_range","targetNameRegex":"DeepSeek[- ]?V5","flags":"i","field":"context_window","min":1048576,"max":2097152,"selector":"first"}');
+    const rows = await db.prepare("SELECT id, condition_json, hit_count, first_seen_at FROM outcomes WHERE market_id = 'm1'").all<{ id: string; condition_json: string; hit_count: number; first_seen_at: number | null }>();
+    expect(await updateOutcomeHits(env, 'm1', rows.results, [V5_MODEL], 1, NOW)).toEqual(['a']);
+  });
+});
+
+describe('chooseAndSettle', () => {
+  test('exclusive 恰一命中 → 派奖', async () => {
+    const { env, db } = makeEnv();
+    await seedMarket(db);
+    await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { seed: 0, pool: 100 });
+    await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { seed: 0, sortOrder: 1, pool: 300 });
+    await seedUser(db, USER_KEY, 1000);
+    await seedBet(db, 'b1', USER_KEY, 'm1', 'a', 100);
+
+    const ok = await chooseAndSettle(env, (await db.prepare('SELECT * FROM markets WHERE id = ?').bind('m1').first<MarketRow>())!, ['a'], [V5_MODEL], '2026-11', NOW);
+    expect(ok).toBe(true);
+    // total = 400；winPool = 100 → payout = 400。
+    const chips = (await db.prepare('SELECT chips FROM users WHERE user_key = ?').bind(USER_KEY).first<{ chips: number }>())?.chips;
+    expect(chips).toBe(1400);
+    const market = await db.prepare("SELECT status, winning_outcome_id, settle_reason FROM markets WHERE id = 'm1'").first<{ status: string; winning_outcome_id: string | null; settle_reason: string }>();
+    expect(market?.status).toBe('settled');
+    expect(market?.winning_outcome_id).toBe('a');
+    expect(market?.settle_reason).toBe('auto');
+  });
+
+  test('exclusive 零命中未截止 → 等待不结算', async () => {
+    const { env, db } = makeEnv();
+    await seedMarket(db);
+    await seedOutcome(db, 'm1', 'a', '{"kind":"never"}');
+    await seedUser(db, USER_KEY, 1000);
+    await seedBet(db, 'b1', USER_KEY, 'm1', 'a', 100);
+
+    const ok = await chooseAndSettle(env, (await db.prepare('SELECT * FROM markets WHERE id = ?').bind('m1').first<MarketRow>())!, [], [V5_MODEL], '2026-11', NOW);
+    expect(ok).toBe(false);
+    const market = await db.prepare("SELECT status FROM markets WHERE id = 'm1'").first<{ status: string }>();
+    expect(market?.status).toBe('open');
+  });
+
+  test('exclusive 零命中已截止 → fallback 结算', async () => {
+    const { env, db } = makeEnv();
+    await seedMarket(db, { deadline: NOW - 1, fallback_outcome_id: 'b' });
+    await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { pool: 100 });
+    await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1, pool: 100 });
+    await seedUser(db, USER_KEY, 1000);
+    await seedBet(db, 'b1', USER_KEY, 'm1', 'b', 100);
+
+    const ok = await chooseAndSettle(env, (await db.prepare('SELECT * FROM markets WHERE id = ?').bind('m1').first<MarketRow>())!, [], [V5_MODEL], '2026-11', NOW);
+    expect(ok).toBe(true);
+    // b 赢：total = 200，winPool = 100 → payout = 200。
+    const chips = (await db.prepare('SELECT chips FROM users WHERE user_key = ?').bind(USER_KEY).first<{ chips: number }>())?.chips;
+    expect(chips).toBe(1200);
+    const market = await db.prepare("SELECT winning_outcome_id, settle_reason FROM markets WHERE id = 'm1'").first<{ winning_outcome_id: string | null; settle_reason: string }>();
+    expect(market?.winning_outcome_id).toBe('b');
+    expect(market?.settle_reason).toBe('fallback');
+  });
+
+  test('first_match：按 sort_order 第一个命中', async () => {
+    const { env, db } = makeEnv();
+    await seedMarket(db, { settle_mode: 'first_match' });
+    await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { sortOrder: 0, pool: 100 });
+    await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1, pool: 100 });
+    await seedUser(db, USER_KEY, 1000);
+    await seedBet(db, 'b1', USER_KEY, 'm1', 'b', 100);
+
+    const ok = await chooseAndSettle(env, (await db.prepare('SELECT * FROM markets WHERE id = ?').bind('m1').first<MarketRow>())!, ['a', 'b'], [V5_MODEL], '2026-11', NOW);
+    expect(ok).toBe(true);
+    const market = await db.prepare("SELECT winning_outcome_id FROM markets WHERE id = 'm1'").first<{ winning_outcome_id: string | null }>();
+    expect(market?.winning_outcome_id).toBe('a');
+    // b1 输：status lost。
+    const bet = await db.prepare("SELECT status FROM bets WHERE id = 'b1'").first<{ status: string }>();
+    expect(bet?.status).toBe('lost');
+  });
+
+  test('manual 市场：有命中也不自动结算', async () => {
+    const { env, db } = makeEnv();
+    await seedMarket(db, { settle_mode: 'manual' });
+    await seedOutcome(db, 'm1', 'a', '{"kind":"never"}');
+    await seedUser(db, USER_KEY, 1000);
+    await seedBet(db, 'b1', USER_KEY, 'm1', 'a', 100);
+
+    const ok = await chooseAndSettle(env, (await db.prepare('SELECT * FROM markets WHERE id = ?').bind('m1').first<MarketRow>())!, ['a'], [V5_MODEL], '2026-11', NOW);
+    expect(ok).toBe(false);
+    const market = await db.prepare("SELECT status FROM markets WHERE id = 'm1'").first<{ status: string }>();
+    expect(market?.status).toBe('open');
+  });
+
+  test('winPool = 0 → void 全员退款', async () => {
+    const { env, db } = makeEnv();
+    await seedMarket(db);
+    await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { seed: 100 });
+    await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1, pool: 200 });
+    await seedUser(db, USER_KEY, 1000);
+    await seedBet(db, 'b1', USER_KEY, 'm1', 'b', 100);
+
+    const ok = await chooseAndSettle(env, (await db.prepare('SELECT * FROM markets WHERE id = ?').bind('m1').first<MarketRow>())!, ['a'], [V5_MODEL], '2026-11', NOW);
+    expect(ok).toBe(true);
+    const chips = (await db.prepare('SELECT chips FROM users WHERE user_key = ?').bind(USER_KEY).first<{ chips: number }>())?.chips;
+    expect(chips).toBe(1100); // 退款
+    const market = await db.prepare("SELECT status, winning_outcome_id FROM markets WHERE id = 'm1'").first<{ status: string; winning_outcome_id: string | null }>();
+    expect(market?.status).toBe('settled');
+    expect(market?.winning_outcome_id).toBeNull();
   });
 });

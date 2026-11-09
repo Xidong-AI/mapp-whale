@@ -92,7 +92,8 @@ export interface PositionItem {
   marketId: string;
   marketTitle: string;
   marketStatus: string;
-  side: 'yes' | 'no';
+  outcomeId: string;
+  outcomeLabel: string;
   amount: number;
   payout: number;
   status: 'open' | 'settled';
@@ -131,19 +132,20 @@ export async function handlePositions(
   }
 
   const { results } = await env.DB.prepare(
-    'SELECT b.market_id, b.side, SUM(b.amount) AS amount, SUM(b.payout) AS payout, ' +
+    'SELECT b.market_id, b.outcome_id, o.label AS outcome_label, SUM(b.amount) AS amount, SUM(b.payout) AS payout, ' +
       "MAX(CASE WHEN b.status = 'open' THEN 'open' ELSE 'settled' END) AS status, MAX(b.created_at) AS created_at, " +
       'm.title AS market_title, m.status AS market_status ' +
-      'FROM bets b JOIN markets m ON m.id = b.market_id ' +
+      'FROM bets b JOIN markets m ON m.id = b.market_id JOIN outcomes o ON o.market_id = b.market_id AND o.id = b.outcome_id ' +
       `WHERE b.user_key = ? AND ${statusFilter} ` +
-      'GROUP BY b.market_id, b.side ' +
+      'GROUP BY b.market_id, b.outcome_id, o.label ' +
       havingClause +
       'ORDER BY created_at DESC, b.market_id DESC LIMIT ?',
   )
     .bind(userKey, ...cursorParams, limit + 1)
     .all<{
       market_id: string;
-      side: 'yes' | 'no';
+      outcome_id: string;
+      outcome_label: string;
       amount: number;
       payout: number;
       status: string;
@@ -156,7 +158,8 @@ export async function handlePositions(
     marketId: r.market_id,
     marketTitle: r.market_title,
     marketStatus: r.market_status,
-    side: r.side,
+    outcomeId: r.outcome_id,
+    outcomeLabel: r.outcome_label,
     amount: r.amount,
     payout: r.payout,
     status: r.status as 'open' | 'settled',
@@ -188,14 +191,14 @@ export async function handleHistory(
   const cursorParams: (string | number)[] = cursor ? [cursor, cursor, cursor] : [];
 
   const { results } = await env.DB.prepare(
-    'SELECT b.id, b.market_id, b.side, b.amount, b.confidence, b.status, b.payout, b.created_at, m.title AS market_title ' +
-      'FROM bets b JOIN markets m ON m.id = b.market_id ' +
+    'SELECT b.id, b.market_id, b.outcome_id, o.label AS outcome_label, b.amount, b.confidence, b.status, b.payout, b.created_at, m.title AS market_title ' +
+      'FROM bets b JOIN markets m ON m.id = b.market_id JOIN outcomes o ON o.market_id = b.market_id AND o.id = b.outcome_id ' +
       'WHERE b.user_key = ? AND b.season = ? ' +
       cursorClause +
       'ORDER BY b.created_at DESC LIMIT ?',
   )
     .bind(userKey, season, ...cursorParams, limit + 1)
-    .all<BetRow & { market_title: string }>();
+    .all<BetRow & { market_title: string; outcome_label: string }>();
 
   const nextCursor = results.length > limit ? results[limit - 1]!.id : null;
   return {
@@ -203,7 +206,8 @@ export async function handleHistory(
       betId: b.id,
       marketId: b.market_id,
       marketTitle: b.market_title,
-      side: b.side,
+      outcomeId: b.outcome_id,
+      outcomeLabel: b.outcome_label,
       amount: b.amount,
       confidence: b.confidence,
       status: b.status,

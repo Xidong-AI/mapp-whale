@@ -4,11 +4,17 @@ import { join } from 'node:path';
 import { MemoryD1 } from './d1';
 import type { Env } from '../../src/types';
 
+const migrationsDir = join(import.meta.dir, '..', '..', 'migrations');
+
+export function loadMigrations(db: MemoryD1, files: string[]): void {
+  for (const f of files) {
+    db.applySchema(readFileSync(join(migrationsDir, f), 'utf-8'));
+  }
+}
+
 export function makeEnv(overrides: Partial<Env> = {}): { env: Env; db: MemoryD1 } {
   const db = new MemoryD1();
-  const migrationsDir = join(import.meta.dir, '..', '..', 'migrations');
-  db.applySchema(readFileSync(join(migrationsDir, '0001_init.sql'), 'utf-8'));
-  db.applySchema(readFileSync(join(migrationsDir, '0002_guards.sql'), 'utf-8'));
+  loadMigrations(db, ['0001_init.sql', '0002_guards.sql', '0003_outcomes.sql', '0004_seed_markets.sql']);
   const env: Env = {
     DB: db as unknown as Env['DB'],
     DEEPSEEK_API_KEY: 'test-deepseek-key',
