@@ -2,7 +2,7 @@
 
 import type { Env, MarketRow, OutcomeRow } from './types';
 import { upsertSeasonStats, writeAudit } from './db';
-import { parseCondition, evaluateCondition, InvalidConditionError, type ModelRow } from './conditions';
+import { parseCondition, evaluateCondition, InvalidConditionError, type Condition, type ModelRow } from './conditions';
 import {
   chooseWinningOutcome,
   computeMultiSettlement,
@@ -226,8 +226,28 @@ export async function settleMarketDb(
 }
 
 /**
- * 对 open/locked 市场按 outcome 求值：累计 hit_count、记录 first_seen_at。
- * 返回每个市场的有效命中（连续 poll_confirmations 次命中）outcome id 列表。
+ * 提取条件树里的 first_seen_between 算子（取第一个），用于判断模型当前是否被观测到。
+ */
+function extractFirstSeen(
+  condition: Condition,
+): { regex: string; flags: string } | null {
+  if (condition.kind === 'first_seen_between') {
+    return { regex: condition.regex, flags: condition.flags ?? '' };
+  }
+  if (condition.kind === 'all' || condition.kind === 'any') {
+    for (const child of condition.of) {
+      const found = extractFirstSeen(child);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * 对市场 outcomes 求值（契约第 4 节）：
+ * - 命中累计 hit_count，未命中清零；连续 poll_confirmations 次命中视为有效命中。
+ * - first_seen_between：首次观测到 regex 命中的模型时记录 first_seen_at（只记一次）。
+ * 返回有效命中的 outcome id 列表。
  */
 export async function updateOutcomeHits(
   env: Env,
@@ -240,17 +260,39 @@ export async function updateOutcomeHits(
   const validHits: string[] = [];
   for (const row of conditionRows) {
     let hit = false;
+    let firstSeenAt = row.first_seen_at;
     try {
-      hit = evaluateCondition(parseCondition(JSON.parse(row.condition_json)), { models });
+      const condition = parseCondition(JSON.parse(row.condition_json));
+      // 尚未记录首次观测时间时，检查本轮是否观测到目标模型；观测到则记录 now。
+      if (firstSeenAt === null) {
+        const info = extractFirstSeen(condition);
+        if (info) {
+          try {
+            const re = new RegExp(info.regex, info.flags);
+            const start =
+              condition.kind === 'first_seen_between' ? condition.start : null;
+            const end =
+              condition.kind === 'first_seen_between' ? condition.end : null;
+            const inWindow =
+              start === null || (now >= start && (end === null || now < end));
+            if (inWindow && models.some((m) => re.test(m.name))) firstSeenAt = now;
+          } catch {
+            // 非法正则：不记录。
+          }
+        }
+      }
+      hit = evaluateCondition(condition, { models, firstSeenAt });
+      if (hit && firstSeenAt === null) firstSeenAt = now;
     } catch {
-      hit = false; // 非法条件视为未命中。
+      hit = false; // 非法 JSON / 非法条件视为未命中。
     }
     const newCount = hit ? row.hit_count + 1 : 0;
-    if (newCount !== row.hit_count || (hit && row.first_seen_at === null)) {
+    const firstSeenChanged = firstSeenAt !== null && row.first_seen_at === null;
+    if (newCount !== row.hit_count || firstSeenChanged) {
       await env.DB.prepare(
-        'UPDATE outcomes SET hit_count = ?, first_seen_at = COALESCE(first_seen_at, ?) WHERE market_id = ? AND id = ?',
+        'UPDATE outcomes SET hit_count = ?, first_seen_at = ? WHERE market_id = ? AND id = ?',
       )
-        .bind(newCount, now, marketId, row.id)
+        .bind(newCount, firstSeenAt, marketId, row.id)
         .run();
     }
     if (hit && newCount >= pollConfirmations) validHits.push(row.id);
@@ -319,7 +361,11 @@ export async function chooseAndSettle(
   await settleMarketDb(
     env,
     market,
-    { outcomeId: chosen.outcomeId, void: false, reason: chosen.reason },
+    {
+      outcomeId: chosen.outcomeId,
+      void: false,
+      reason: chosen.reason === 'fallback' ? 'fallback' : 'auto',
+    },
     season,
     now,
   );

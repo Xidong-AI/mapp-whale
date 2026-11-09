@@ -49,6 +49,10 @@ async function seedExpiredMarketWithBet(
         "VALUES (?, ?, ?, ?, ?, ?, 0, 'open', 0, '2026-11', ?)",
     )
     .run(`b_${marketId}_${userKey}`, `req_${marketId}_${userKey}`, marketId, outcomeId, userKey, amount, NOW);
+  // 同步 outcome pool。
+  await db.inner
+    .prepare('UPDATE outcomes SET pool = pool + ? WHERE market_id = ? AND id = ?')
+    .run(amount, marketId, outcomeId);
   await db.inner.prepare('UPDATE markets SET deadline = ? WHERE id = ?').run(NOW - 1, marketId);
 }
 
@@ -132,6 +136,7 @@ describe('settleTick 单市场失败不阻塞', () => {
           "VALUES ('b1', 'r1', 'm1', 'a', ?, 100, 0, 'open', 0, '2026-11', ?)",
       )
       .run(USER_KEY, NOW);
+    await db.inner.prepare("UPDATE outcomes SET pool = pool + 100 WHERE market_id = 'm1' AND id = 'a'").run();
     await db.inner.prepare('UPDATE markets SET deadline = ? WHERE id = ?').run(NOW - 1, 'm1');
 
     const restore = stubModelsFetch();
@@ -176,6 +181,7 @@ describe('settleTick 单市场失败不阻塞', () => {
           "VALUES ('b1', 'r1', 'm1', 'a', ?, 100, 0, 'open', 0, '2026-11', ?)",
       )
       .run(USER_KEY, NOW);
+    await db.inner.prepare("UPDATE outcomes SET pool = pool + 100 WHERE market_id = 'm1' AND id = 'a'").run();
 
     const original = globalThis.fetch;
     globalThis.fetch = (async () =>

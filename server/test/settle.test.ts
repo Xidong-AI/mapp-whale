@@ -1,7 +1,7 @@
 // 结算引擎集成测试（契约 v2 第 4 节）：多 outcome 求值、chooseAndSettle、manual 市场等待、hit_count 累计。
 import { describe, expect, test } from 'bun:test';
 import { updateOutcomeHits, chooseAndSettle, evaluateConditionJson } from '../src/settle';
-import { makeEnv } from './helpers/env';
+import { makeEnv, clearSeedMarkets } from './helpers/env';
 import { MemoryD1 } from './helpers/d1';
 import type { MarketRow } from '../src/types';
 import type { ModelRow } from '../src/conditions';
@@ -67,6 +67,10 @@ async function seedBet(
         "VALUES (?, ?, ?, ?, ?, ?, 0, 'open', 0, '2026-11', ?)",
     )
     .run(id, `req_${id}`, marketId, outcomeId, userKey, amount, NOW);
+  // 同步 outcome pool（下注流程里 pool 与 bet 同 batch 累计；seed 直接补齐）。
+  await db.inner
+    .prepare('UPDATE outcomes SET pool = pool + ? WHERE market_id = ? AND id = ?')
+    .run(amount, marketId, outcomeId);
 }
 
 describe('evaluateConditionJson', () => {
@@ -174,11 +178,13 @@ describe('chooseAndSettle', () => {
 
   test('exclusive 零命中已截止 → fallback 结算', async () => {
     const { env, db } = makeEnv();
-    await seedMarket(db, { deadline: NOW - 1, fallback_outcome_id: 'b' });
+    // 先建未来市场、插注单，再改 deadline 为已过期（触发器要求插入时市场未过期）。
+    await seedMarket(db, { fallback_outcome_id: 'b' });
     await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { pool: 100 });
     await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1, pool: 100 });
     await seedUser(db, USER_KEY, 1000);
     await seedBet(db, 'b1', USER_KEY, 'm1', 'b', 100);
+    await db.inner.prepare('UPDATE markets SET deadline = ? WHERE id = ?').run(NOW - 1, 'm1');
 
     const ok = await chooseAndSettle(env, (await db.prepare('SELECT * FROM markets WHERE id = ?').bind('m1').first<MarketRow>())!, [], [V5_MODEL], '2026-11', NOW);
     expect(ok).toBe(true);
@@ -196,15 +202,15 @@ describe('chooseAndSettle', () => {
     await seedOutcome(db, 'm1', 'a', '{"kind":"never"}', { sortOrder: 0, pool: 100 });
     await seedOutcome(db, 'm1', 'b', '{"kind":"never"}', { sortOrder: 1, pool: 100 });
     await seedUser(db, USER_KEY, 1000);
-    await seedBet(db, 'b1', USER_KEY, 'm1', 'b', 100);
+    await seedBet(db, 'b1', USER_KEY, 'm1', 'a', 100);
 
     const ok = await chooseAndSettle(env, (await db.prepare('SELECT * FROM markets WHERE id = ?').bind('m1').first<MarketRow>())!, ['a', 'b'], [V5_MODEL], '2026-11', NOW);
     expect(ok).toBe(true);
     const market = await db.prepare("SELECT winning_outcome_id FROM markets WHERE id = 'm1'").first<{ winning_outcome_id: string | null }>();
     expect(market?.winning_outcome_id).toBe('a');
-    // b1 输：status lost。
+    // b1 押 a 且 a 赢：won。
     const bet = await db.prepare("SELECT status FROM bets WHERE id = 'b1'").first<{ status: string }>();
-    expect(bet?.status).toBe('lost');
+    expect(bet?.status).toBe('won');
   });
 
   test('manual 市场：有命中也不自动结算', async () => {

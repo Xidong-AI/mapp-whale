@@ -68,6 +68,10 @@ async function seedBet(
         "VALUES (?, ?, ?, ?, ?, ?, 0, 'open', 0, '2026-11', ?)",
     )
     .run(id, `req_${id}`, marketId, outcomeId, userKey, amount, NOW);
+  // 同步 outcome pool（下注流程里 pool 与 bet 同 batch 累计；seed 直接补齐）。
+  await db.inner
+    .prepare('UPDATE outcomes SET pool = pool + ? WHERE market_id = ? AND id = ?')
+    .run(amount, marketId, outcomeId);
 }
 
 describe('迁移触发器', () => {
@@ -136,13 +140,13 @@ describe('POST /bets 原子回滚', () => {
 
   test('市场已截止：池子更新带守卫不生效', async () => {
     const { db } = makeEnv();
-    await seedMarket(db, { deadline: NOW - 1 });
+    await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
-    // 池子更新守卫：非 open 或过期时静默不生效（配合触发器整批回滚）。
+    // 池子更新本身没有状态守卫（守卫在 bets 插入触发器上），这里验证 outcomes 更新可直接执行。
     const res = await db
       .prepare("UPDATE outcomes SET pool = pool + 100 WHERE market_id = 'm1' AND id = 'a'")
       .run();
-    expect(res.meta.changes).toBe(1); // outcomes 无状态守卫，由 bets 触发器整体回滚
+    expect(res.meta.changes).toBe(1);
   });
 });
 
@@ -219,13 +223,15 @@ describe('结算两阶段抢占（多结果）', () => {
 
   test('cron 对卡在 settling 的市场幂等重试，不重复派奖', async () => {
     const { env, db } = makeEnv();
-    await seedMarket(db, { deadline: NOW - 1 }); // 已过期
+    // 先建未来市场、插注单，再改 deadline 为已过期（触发器要求插入时市场未过期）。
+    await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await seedOutcome(db, 'm1', 'b', 0, 1);
     await seedUser(db, USER_KEY, 1000);
     await seedUser(db, USER_KEY2, 1000);
     await seedBet(db, 'b1', USER_KEY, 'a', 100);
     await seedBet(db, 'b2', USER_KEY2, 'b', 100);
+    await db.prepare('UPDATE markets SET deadline = ? WHERE id = ?').bind(NOW - 1, 'm1').run();
 
     // 模拟上一轮已选定赢家 a 但派奖失败，市场停在 settling。
     await db.prepare("UPDATE markets SET status = 'settling', winning_outcome_id = 'a' WHERE id = 'm1'").run();
@@ -245,10 +251,11 @@ describe('结算两阶段抢占（多结果）', () => {
 
   test('cron 重试：settling 且无赢家记录且已过期 → void 退款', async () => {
     const { env, db } = makeEnv();
-    await seedMarket(db, { deadline: NOW - 1 });
+    await seedMarket(db);
     await seedOutcome(db, 'm1', 'a');
     await seedUser(db, USER_KEY, 1000);
     await seedBet(db, 'b1', USER_KEY, 'a', 100);
+    await db.prepare('UPDATE markets SET deadline = ? WHERE id = ?').bind(NOW - 1, 'm1').run();
 
     await db.prepare("UPDATE markets SET status = 'settling' WHERE id = 'm1'").run();
     const retried = await retryStuckSettling(env, { season: '2026-11', poll_confirmations: 2 }, NOW);

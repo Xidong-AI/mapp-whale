@@ -28,3 +28,8 @@ export function makeEnv(overrides: Partial<Env> = {}): { env: Env; db: MemoryD1 
   };
   return { env, db };
 }
+
+/** 清除 0004 种子市场与 outcomes（需要空库隔离的测试用）。 */
+export function clearSeedMarkets(db: MemoryD1): void {
+  db.inner.exec('DELETE FROM outcomes; DELETE FROM markets;');
+}
