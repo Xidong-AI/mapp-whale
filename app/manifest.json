@@ -13,6 +13,7 @@
     "storage.write",
     "theme.read"
   ],
+  "assets": ["assets/icon.svg"],
   "endpoints": {
     "publicConfig": {
       "url": "https://whale-api.example.com/public/config",

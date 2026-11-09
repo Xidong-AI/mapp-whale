@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="whale-icon-title">
+  <title id="whale-icon-title">预言鲸</title>
+  <rect width="64" height="64" rx="16" fill="#f6f4ef"/>
+  <g fill="none" stroke="#2f6b45" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 35c2-9 11-15 21-15 10 0 17 6 18 14 1 8-5 14-14 14H24c-3 0-5-2-5-5 0-3 2-5 5-5h14"/>
+    <path d="M18 35c-5-6-10-9-15-8 3 5 5 9 6 13-1 4-4 8-8 10 6 1 13-2 17-8"/>
+    <path d="M36 46c-1 5-5 9-10 11 3-5 4-9 4-12"/>
+    <path d="M43 19c-2-4-1-7 2-9"/>
+  </g>
+  <circle cx="46" cy="31" r="2.4" fill="#2f6b45"/>
+</svg>
