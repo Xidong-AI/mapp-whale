@@ -4,24 +4,21 @@
 
 ## 1. 目标与范围
 
-- Linux.do 微应用（mapp），纯虚拟筹码预测市场。
-- 不接 LDC、不充值、不提现、无真实财物兑换。
+- Linux.do 微应用（mapp），虚拟筹码预测市场。
 - 预测标的：DeepSeek 下一代模型（版本出现、上下文、输出上限等可机读条件）。
 - 前端：Bun + Vite + TypeScript，单 IIFE `app.js`，mapp SDK。
 - 后端：Cloudflare Workers + D1 + Cron Triggers。
 
 ## 2. 术语与文案
 
-| 内部字段 | 对外文案 | 禁止文案 |
-| -------- | -------- | -------- |
-| chips | 鲸珠（虚拟筹码） | 钱、余额宝、现金 |
-| bet | 预测 / 投入 | 下注、押注、赌博 |
-| pool | 彩池 | 赌池 |
-| odds | 预期回报 | 赔率、盘口 |
-| settle | 结算 | 开奖、派彩 |
-| side yes/no | 涨 / 跌 | 买大、买小 |
-
-所有用户可见文案统一使用右列禁词的替代说法。
+| 内部字段 | 对外文案 |
+| -------- | -------- |
+| chips | 鲸珠 |
+| bet | 预测 / 投入 |
+| pool | 彩池 |
+| odds | 预期回报 |
+| settle | 结算 |
+| side yes/no | 涨 / 跌 |
 
 ## 3. 目录结构
 
@@ -510,4 +507,3 @@ Cron 另设每月 1 日 00:10（Asia/Shanghai）执行归档：见第 11 节。
 - `server`：`bun test` 通过；覆盖结算（yes/no/void/退款/余数）、幂等下注、每日领取、JWT 拒绝、CORS。
 - `app`：`bun run typecheck` 通过；`bun test` 通过；`bun run build` 产出 `dist/package/app.zip`。
 - 手动：用 `wrangler dev` 起后端，前端连本地端点完成「领鲸珠 → 预测 → 管理端结算 → 排行榜变化」全流程。
-- 所有用户可见文案不含第 2 节禁词。

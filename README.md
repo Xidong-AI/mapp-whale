@@ -1,6 +1,6 @@
 # 预言鲸
 
-Linux.do 微应用（mapp）：拖动滑块预测 DeepSeek 下一代模型，纯虚拟鲸珠，不接 LDC。
+Linux.do 微应用（mapp）：拖动滑块预测 DeepSeek 下一代模型。
 
 - 前端：Bun + Vite + TypeScript，单 IIFE，运行在 mapp 沙箱。
 - 后端：Cloudflare Workers + D1 + Cron Triggers。
@@ -63,13 +63,6 @@ curl -X PATCH https://<API_ORIGIN>/admin/config \
 ```
 
 完整 API 与数据模型见 `docs/CONTRACT.md`。
-
-## 合规
-
-- 鲸珠是纯虚拟筹码，无充值、无提现、无真实财物兑换。
-- 不接入 LDC 或其他积分系统。
-- 文案统一使用「预测 / 投入 / 彩池 / 结算」，不使用赌博类词汇。
-- 市场仅由运营方预置，条件可机读、可复核。
 
 ## 开发检查与 CI
 
