@@ -40,6 +40,16 @@ if (origin !== sourceOrigin) {
 manifest.id = process.env.MINI_APP_ID || manifest.id;
 manifest.version = process.env.MINI_APP_VERSION || manifest.version;
 
+const PLACEHOLDER_ID = "00000000-0000-7000-8000-000000000000";
+if (
+  manifest.id === PLACEHOLDER_ID &&
+  process.env.MINI_APP_ALLOW_PLACEHOLDER_ID !== "1"
+) {
+  throw new Error(
+    "manifest.id 仍是占位符。先去社区应用页创建应用，复制 UUIDv7，再用 MINI_APP_ID=<id> 构建；本地测试可设 MINI_APP_ALLOW_PLACEHOLDER_ID=1。"
+  );
+}
+
 await copyFile("src/template.html", "dist/web/index.html");
 await copyFile("src/strings.json", "dist/web/strings.json");
 
