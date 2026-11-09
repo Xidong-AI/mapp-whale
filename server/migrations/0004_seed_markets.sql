@@ -19,10 +19,10 @@ INSERT OR REPLACE INTO outcomes (id, market_id, label, condition_json, pool, see
   ('1m-2m', 'm_v5_context', '1M – 2M', '{"kind":"field_range","targetNameRegex":"DeepSeek[- ]?V5","flags":"i","field":"context_window","min":1048576,"max":2097152,"selector":"first"}', 0, 1000, 1, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000),
   ('2m-4m', 'm_v5_context', '2M – 4M', '{"kind":"field_range","targetNameRegex":"DeepSeek[- ]?V5","flags":"i","field":"context_window","min":2097152,"max":4194304,"selector":"first"}', 0, 1000, 2, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000),
   ('ge-4m', 'm_v5_context', '≥ 4M', '{"kind":"field_range","targetNameRegex":"DeepSeek[- ]?V5","flags":"i","field":"context_window","min":4194304,"max":null,"selector":"first"}', 0, 1000, 3, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000),
-  ('unknown_ctx', 'm_v5_context', '无法判定', '{"kind":"manual"}', 0, 1000, 4, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000),
+  ('unknown', 'm_v5_context', '无法判定', '{"kind":"manual"}', 0, 1000, 4, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000),
 
   ('lt-128k', 'm_v5_output', '< 128K', '{"kind":"field_range","targetNameRegex":"DeepSeek[- ]?V5","flags":"i","field":"max_output_tokens","min":null,"max":131072,"selector":"first"}', 0, 1000, 0, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000),
   ('128k-256k', 'm_v5_output', '128K – 256K', '{"kind":"field_range","targetNameRegex":"DeepSeek[- ]?V5","flags":"i","field":"max_output_tokens","min":131072,"max":262144,"selector":"first"}', 0, 1000, 1, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000),
   ('256k-500k', 'm_v5_output', '256K – 500K', '{"kind":"field_range","targetNameRegex":"DeepSeek[- ]?V5","flags":"i","field":"max_output_tokens","min":262144,"max":512000,"selector":"first"}', 0, 1000, 2, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000),
   ('ge-500k', 'm_v5_output', '≥ 500K', '{"kind":"field_range","targetNameRegex":"DeepSeek[- ]?V5","flags":"i","field":"max_output_tokens","min":512000,"max":null,"selector":"first"}', 0, 1000, 3, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000),
-  ('unknown_out', 'm_v5_output', '无法判定', '{"kind":"manual"}', 0, 1000, 4, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000);
+  ('unknown', 'm_v5_output', '无法判定', '{"kind":"manual"}', 0, 1000, 4, 0, NULL, CAST(strftime('%s','now') AS INTEGER) * 1000);
