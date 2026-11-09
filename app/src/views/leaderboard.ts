@@ -72,6 +72,11 @@ export function createLeaderboardView(ctx: AppContext): LeaderboardView {
   }
 
   function renderSeasons(): void {
+    seasonTabs.hidden = type === "assets";
+    if (type === "assets") {
+      clear(seasonTabs);
+      return;
+    }
     const base = ctx.getConfig().season || currentSeason();
     const options = seasonOptions(base, 6);
     if (!options.includes(season)) options.unshift(season);
@@ -172,13 +177,15 @@ export function createLeaderboardView(ctx: AppContext): LeaderboardView {
 
   function render(): void {
     const config = ctx.getConfig();
+    const scopeLabel =
+      type === "assets" ? t("leaderboard.allTime") : t("leaderboard.eyebrow", { season });
     setText(
       eyebrow,
       items.length > 0
-        ? `${t("leaderboard.eyebrow", { season })} · ${t("leaderboard.summary", {
-            count: items.length,
-          })}`
-        : t("leaderboard.eyebrow", { season: season || config.season || "—" })
+        ? `${scopeLabel} · ${t("leaderboard.summary", { count: items.length })}`
+        : type === "assets"
+          ? scopeLabel
+          : t("leaderboard.eyebrow", { season: season || config.season || "—" })
     );
     for (const button of typeButtons) {
       button.setAttribute("aria-pressed", String(button.dataset.board === type));

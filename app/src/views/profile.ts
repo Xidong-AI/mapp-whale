@@ -367,14 +367,12 @@ export function createProfileView(ctx: AppContext): ProfileView {
             })
           : await ctx.api.history({
               season: ctx.getConfig().season || currentSeason(),
-              limit: PAGE_SIZE,
+              limit: ctx.getConfig().pageSize ?? PAGE_SIZE,
               cursor,
             });
       if (mine !== recordsToken) return;
       records = reset ? page.items : [...records, ...page.items];
-      // The worker currently returns market_id for positions but reads bets.id
-      // as the cursor; do not expose a broken "load more" for that tab.
-      cursor = tab === "positions" ? null : page.nextCursor;
+      cursor = page.nextCursor;
       recordsErrorState = null;
     } catch (cause) {
       if (mine !== recordsToken) return;

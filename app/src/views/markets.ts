@@ -246,7 +246,8 @@ export function createMarketsView(ctx: AppContext): MarketsView {
     render();
 
     try {
-      const page = await ctx.api.markets({ limit: PAGE_SIZE });
+      const limit = ctx.getConfig().pageSize ?? PAGE_SIZE;
+      const page = await ctx.api.markets({ limit });
       ctx.setMarkets(page.items);
       cursor = page.nextCursor;
       hasMore = Boolean(page.nextCursor);
@@ -281,7 +282,8 @@ export function createMarketsView(ctx: AppContext): MarketsView {
     moreButton.disabled = true;
     render();
     try {
-      const page = await ctx.api.markets({ limit: PAGE_SIZE, cursor });
+      const limit = ctx.getConfig().pageSize ?? PAGE_SIZE;
+      const page = await ctx.api.markets({ limit, cursor });
       const seen = new Set(ctx.getMarkets().map((market) => market.id));
       const merged = [...ctx.getMarkets()];
       for (const market of page.items) {

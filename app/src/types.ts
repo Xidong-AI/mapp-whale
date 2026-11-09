@@ -10,6 +10,8 @@ export interface PublicConfig {
   maxBetRatio: number;
   dailyChips: number;
   initialChips: number;
+  pageSize?: number;
+  accuracyMinSamples?: number;
   serverTime: number;
 }
 

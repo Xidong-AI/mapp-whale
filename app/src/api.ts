@@ -141,7 +141,7 @@ export function normalizeMarket(value: unknown): Market {
     firstSeenAt: nullableNumber(raw.firstSeenAt),
     settledAt: nullableNumber(raw.settledAt),
     settleReason: nullableString(raw.settleReason),
-    participants: nullableNumber(raw.participants),
+    participants: nullableNumber(raw.participants ?? raw.participantCount),
   };
 }
 
@@ -258,6 +258,8 @@ function normalizeConfig(value: unknown): PublicConfig {
     maxBetRatio: numberOf(raw.maxBetRatio, 0.5),
     dailyChips: integerOf(raw.dailyChips, 100),
     initialChips: integerOf(raw.initialChips, 1000),
+    pageSize: nullableNumber(raw.pageSize) ?? undefined,
+    accuracyMinSamples: nullableNumber(raw.accuracyMinSamples) ?? undefined,
     serverTime: integerOf(raw.serverTime),
   };
 }
