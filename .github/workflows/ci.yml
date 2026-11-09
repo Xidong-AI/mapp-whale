@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commit-message:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check commit messages
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            RANGE="${{ github.event.before }}..${{ github.sha }}"
+          else
+            RANGE="HEAD"
+          fi
+          node .github/scripts/check-commit-msg.mjs --range "$RANGE"
+
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install
+        working-directory: app
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        working-directory: app
+        run: bun run typecheck
+      - name: Test
+        working-directory: app
+        run: bun test
+      - name: Build
+        working-directory: app
+        run: bun run build
+      - name: Upload mapp package
+        uses: actions/upload-artifact@v4
+        with:
+          name: mapp-package
+          path: app/dist/package/app.zip
+          if-no-files-found: warn
+
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install
+        working-directory: server
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        working-directory: server
+        run: bun run typecheck
+      - name: Test
+        working-directory: server
+        run: bun test

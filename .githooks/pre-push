@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+
+if [ -f app/package.json ]; then
+  echo "==> app: typecheck + test"
+  (cd app && bun run typecheck && bun test)
+fi
+
+if [ -f server/package.json ]; then
+  echo "==> server: typecheck + test"
+  (cd server && bun run typecheck && bun test)
+fi
