@@ -168,6 +168,15 @@ export async function ensureUser(
       .bind(userKey, cfg.initial_chips, 'claim', cfg.season, now)
       .run();
   }
+  // 已有用户若名称为空，后续请求可回填；非空不覆盖。
+  if (name) {
+    await env.DB.prepare(
+      "UPDATE users SET display_name = ?, updated_at = ? " +
+        "WHERE user_key = ? AND (display_name IS NULL OR display_name = '')",
+    )
+      .bind(name, now, userKey)
+      .run();
+  }
   const row = await env.DB.prepare('SELECT * FROM users WHERE user_key = ?')
     .bind(userKey)
     .first<UserRow>();

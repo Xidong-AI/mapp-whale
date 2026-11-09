@@ -22,14 +22,16 @@ export interface MarketView {
   firstSeenAt: number | null;
   settledAt: number | null;
   settleReason: string | null;
+  participantCount?: number;
 }
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
-export function marketView(m: MarketRow): MarketView {
+export function marketView(m: MarketRow, participantCount?: number): MarketView {
   const yesBase = m.yes_pool + m.seed_yes;
   const noBase = m.no_pool + m.seed_no;
   const total = yesBase + noBase;
+  const userTotal = m.yes_pool + m.no_pool;
   // 空池按 1.0 处理，避免除零。
   const impliedYes = total === 0 ? 1.0 : yesBase / total;
   const payoutYes = yesBase === 0 ? 1.0 : round2(total / yesBase);
@@ -45,7 +47,7 @@ export function marketView(m: MarketRow): MarketView {
     noPool: m.no_pool,
     seedYes: m.seed_yes,
     seedNo: m.seed_no,
-    yesShare: total === 0 ? 1.0 : round2(yesBase / total),
+    yesShare: userTotal === 0 ? 1.0 : round2(m.yes_pool / userTotal),
     impliedYes: round2(impliedYes),
     payoutYes,
     payoutNo,
@@ -53,6 +55,7 @@ export function marketView(m: MarketRow): MarketView {
     firstSeenAt: m.first_seen_at,
     settledAt: m.settled_at,
     settleReason: m.settle_reason,
+    ...(participantCount === undefined ? {} : { participantCount }),
   };
 }
 
@@ -65,6 +68,8 @@ export async function handlePublicConfig(env: Env, now: number): Promise<unknown
     maxBetRatio: cfg.max_bet_ratio,
     dailyChips: cfg.daily_chips,
     initialChips: cfg.initial_chips,
+    pageSize: cfg.page_size,
+    accuracyMinSamples: cfg.accuracy_min_samples,
     serverTime: now,
   };
 }
@@ -84,7 +89,8 @@ export async function handlePublicMarkets(
   if (id) {
     const row = await env.DB.prepare('SELECT * FROM markets WHERE id = ?').bind(id).first<MarketRow>();
     if (!row) throw new Error('NOT_FOUND');
-    return { items: [marketView(row)], nextCursor: null };
+    const counts = await participantCounts(env, [row.id]);
+    return { items: [marketView(row, counts.get(row.id) ?? 0)], nextCursor: null };
   }
 
   const statuses = ['open', 'locked', 'settled', 'void'];
@@ -106,7 +112,20 @@ export async function handlePublicMarkets(
   }
 
   const nextCursor = rows.length > limit ? rows[limit - 1]!.id : null;
-  return { items: rows.slice(0, limit).map(marketView), nextCursor };
+  const page = rows.slice(0, limit);
+  const counts = await participantCounts(env, page.map((m) => m.id));
+  return { items: page.map((m) => marketView(m, counts.get(m.id) ?? 0)), nextCursor };
+}
+
+async function participantCounts(env: Env, ids: string[]): Promise<Map<string, number>> {
+  if (ids.length === 0) return new Map();
+  const placeholders = ids.map(() => '?').join(',');
+  const { results } = await env.DB.prepare(
+    `SELECT market_id, COUNT(DISTINCT user_key) AS n FROM bets WHERE market_id IN (${placeholders}) GROUP BY market_id`,
+  )
+    .bind(...ids)
+    .all<{ market_id: string; n: number }>();
+  return new Map(results.map((r) => [r.market_id, r.n]));
 }
 
 async function fetchMarkets(
