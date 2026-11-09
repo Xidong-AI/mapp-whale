@@ -40,7 +40,8 @@
       "void": "已取消",
       "outcomeYes": "判涨",
       "outcomeNo": "判跌",
-      "outcomeVoid": "退款"
+      "outcomeVoid": "退款",
+      "settling": "结算中"
     },
     "markets": {
       "eyebrow": "第 {season} 赛季",
@@ -60,7 +61,8 @@
       "cardAria": "{title}，{status}，截止 {time}",
       "errorTitle": "市场数据没有浮上来",
       "errorBody": "检查网络后重试，已缓存的行情会继续显示。",
-      "loadingLabel": "正在读取市场"
+      "loadingLabel": "正在读取市场",
+      "outcomesCount": "共 {count} 个结果"
     },
     "detail": {
       "back": "返回市场",
@@ -68,7 +70,7 @@
       "bearish": "强烈看跌",
       "neutral": "中性",
       "bullish": "强烈看涨",
-      "sliderHelp": "拖动滑块选择方向与强度。松开不会自动提交，确认后再投入。",
+      "sliderHelp": "滑块只表达你的信念强度，不影响彩池与预期回报。松开不会自动提交，确认后再投入。",
       "ticket": "预测单",
       "pendingSide": "待选择",
       "sideYes": "涨",
@@ -100,8 +102,8 @@
       "timelineSettled": "{outcome} · {time}",
       "timelineWaiting": "截止后按条件自动结算",
       "consensusTitle": "社区共识",
-      "consensusNote": "隐含看涨比例，含系统种子。",
-      "poolDetail": "彩池 {pool} · 涨 {yes} / 跌 {no}",
+      "consensusNote": "各结果隐含概率，含系统种子与全部彩池。",
+      "poolDetail": "总池 {pool}",
       "deadlineAt": "截止 {time}",
       "closedNote": "市场已截止，无法继续投入。",
       "closedWaiting": "已截止，等待结算",
@@ -114,7 +116,16 @@
       "retryHint": "提交失败时可直接重试，不会重复扣款。",
       "draftCleared": "已清空未提交的预测",
       "stake": "投入 {amount} 鲸珠",
-      "betRecorded": "预测已记录"
+      "betRecorded": "预测已记录",
+      "outcomeTitle": "选择结果",
+      "outcomeCount": "{count} 个结果",
+      "needOutcome": "请先选择一个结果",
+      "winner": "已判定",
+      "fallback": "兜底",
+      "voidRefund": "市场已取消，投入将全额退款",
+      "settledWinner": "判定为 {label}",
+      "settlingWait": "结算中，请稍候",
+      "hitOutcomes": "已命中 {count} 个结果"
     },
     "leaderboard": {
       "eyebrow": "第 {season} 赛季",

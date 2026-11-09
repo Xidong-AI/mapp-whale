@@ -338,7 +338,14 @@ export function sortMarkets(items: readonly Market[]): Market[] {
 }
 
 export function marketPoolTotal(market: Market): number {
-  return Math.max(0, market.totalPool);
+  if (Number.isFinite(market.totalPool) && market.totalPool > 0) {
+    return Math.max(0, Math.trunc(market.totalPool));
+  }
+  // 服务端缺字段时退回各结果池合计（含种子）。
+  return market.outcomes.reduce(
+    (sum, outcome) => sum + Math.max(0, outcome.pool) + Math.max(0, outcome.seed),
+    0
+  );
 }
 
 /** 可选的 outcome（排除 fallback 兜底项）；全为兜底时退回全部。 */

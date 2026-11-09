@@ -388,7 +388,10 @@ export async function startApp(): Promise<void> {
 
     const cachedMarkets = cache.read<{ items: Market[] }>(CACHE_KEYS.markets);
     if (cachedMarkets && Array.isArray(cachedMarkets.value?.items)) {
-      markets = cachedMarkets.value.items;
+      // 兼容 v1 缓存：旧二元市场没有 outcomes，直接跳过。
+      markets = cachedMarkets.value.items.filter(
+        (market) => market && Array.isArray(market.outcomes)
+      );
     }
 
     if (signedIn()) {

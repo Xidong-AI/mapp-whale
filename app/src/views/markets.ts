@@ -116,7 +116,7 @@ export function createMarketsView(ctx: AppContext): MarketsView {
         el(
           "span",
           "market-card__outcome-more",
-          `共 ${market.outcomes.length} 个结果`
+          t("markets.outcomesCount", { count: market.outcomes.length })
         )
       );
     }
@@ -214,7 +214,11 @@ export function createMarketsView(ctx: AppContext): MarketsView {
       CACHE_TTL.markets
     );
     if (cached && Array.isArray(cached.value?.items)) {
-      ctx.setMarkets(cached.value.items);
+      // v1 缓存没有 outcomes；丢弃旧结构，避免渲染崩溃。
+      const items = cached.value.items.filter(
+        (market) => market && Array.isArray(market.outcomes)
+      );
+      if (items.length > 0) ctx.setMarkets(items);
     }
 
     if (

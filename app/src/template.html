@@ -387,8 +387,17 @@
                 <span data-text="detail.neutral">中性</span>
                 <span data-text="detail.bullish">强烈看涨</span>
               </div>
-              <p class="hint" id="slider-help" data-text="detail.sliderHelp">拖动滑块选择方向与强度。松开不会自动提交，确认后再投入。</p>
+              <p class="hint" id="slider-help" data-text="detail.sliderHelp">滑块只表达你的信念强度，不影响彩池与预期回报。松开不会自动提交，确认后再投入。</p>
             </div>
+
+            <section class="panel outcome-panel" aria-labelledby="outcome-title">
+              <div class="panel__head">
+                <h2 id="outcome-title" data-text="detail.outcomeTitle">选择结果</h2>
+                <span class="eyebrow" id="outcome-note"></span>
+              </div>
+              <div class="outcome-list" id="outcome-list" role="radiogroup" aria-labelledby="outcome-title"></div>
+              <p class="hint" id="outcome-hint"></p>
+            </section>
           </article>
 
           <aside class="bet-card" id="bet-card">
@@ -442,15 +451,8 @@
               <h2 id="consensus-title" data-text="detail.consensusTitle">社区共识</h2>
               <span class="eyebrow" id="consensus-eyebrow"></span>
             </div>
-            <div class="consensus__bar" aria-hidden="true">
-              <span class="consensus__yes" id="consensus-yes"></span>
-              <span class="consensus__no" id="consensus-no"></span>
-            </div>
-            <div class="consensus__labels">
-              <span><i class="dot dot--yes" aria-hidden="true"></i><span data-text="detail.sideYes">涨</span> <b class="num" id="consensus-yes-label">—</b></span>
-              <span><i class="dot dot--no" aria-hidden="true"></i><span data-text="detail.sideNo">跌</span> <b class="num" id="consensus-no-label">—</b></span>
-            </div>
-            <p class="consensus__note" data-text="detail.consensusNote">隐含看涨比例，含系统种子。</p>
+            <div class="dist" id="consensus-list"></div>
+            <p class="consensus__note" data-text="detail.consensusNote">各结果隐含概率，含系统种子与全部彩池。</p>
             <p class="consensus__pool" id="consensus-pool"></p>
           </section>
 
