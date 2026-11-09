@@ -43,7 +43,9 @@ jobs:
           bun-version: latest
       - name: Install
         working-directory: app
-        run: bun install --frozen-lockfile
+        run: |
+          sed -i 's#registry.npmmirror.com#registry.npmjs.org#g' bun.lock
+          bun install --frozen-lockfile
       - name: Typecheck
         working-directory: app
         run: bun run typecheck
@@ -69,7 +71,9 @@ jobs:
           bun-version: latest
       - name: Install
         working-directory: server
-        run: bun install --frozen-lockfile
+        run: |
+          sed -i 's#registry.npmmirror.com#registry.npmjs.org#g' bun.lock
+          bun install --frozen-lockfile
       - name: Typecheck
         working-directory: server
         run: bun run typecheck
