@@ -4,11 +4,18 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-09",
   "observability": { "enabled": true },
+  "vars": {
+    "PLATFORM_AUDIENCE": "https://mapp-whale.pj568.eu.org",
+    "ALLOWED_ORIGINS": "https://linux.do"
+  },
+  "routes": [
+    { "pattern": "mapp-whale.pj568.eu.org", "custom_domain": true }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "whale",
-      "database_id": "<DATABASE_ID>",
+      "database_id": "c6c2f215-6c7c-4094-a5c1-8f8ae728cb84",
       "migrations_dir": "migrations"
     }
   ],
