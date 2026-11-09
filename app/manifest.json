@@ -1,0 +1,69 @@
+{
+  "format": 1,
+  "id": "00000000-0000-7000-8000-000000000000",
+  "name": "预言鲸",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "script": "app.js",
+  "style": "app.css",
+  "permissions": [
+    "user.read",
+    "network.request",
+    "storage.read",
+    "storage.write",
+    "theme.read"
+  ],
+  "endpoints": {
+    "publicConfig": {
+      "url": "https://whale-api.example.com/public/config",
+      "method": "GET",
+      "auth": "none"
+    },
+    "publicMarkets": {
+      "url": "https://whale-api.example.com/public/markets",
+      "method": "GET",
+      "auth": "none",
+      "query": ["id", "status", "limit", "cursor"]
+    },
+    "publicLeaderboard": {
+      "url": "https://whale-api.example.com/public/leaderboard",
+      "method": "GET",
+      "auth": "none",
+      "query": ["type", "season", "limit"]
+    },
+    "me": {
+      "url": "https://whale-api.example.com/me",
+      "method": "GET",
+      "auth": "platform"
+    },
+    "claim": {
+      "url": "https://whale-api.example.com/me/claim",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "positions": {
+      "url": "https://whale-api.example.com/me/positions",
+      "method": "GET",
+      "auth": "platform",
+      "query": ["status", "limit", "cursor"]
+    },
+    "history": {
+      "url": "https://whale-api.example.com/me/history",
+      "method": "GET",
+      "auth": "platform",
+      "query": ["season", "limit", "cursor"]
+    },
+    "placeBet": {
+      "url": "https://whale-api.example.com/bets",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "myRank": {
+      "url": "https://whale-api.example.com/me/rank",
+      "method": "GET",
+      "auth": "platform",
+      "query": ["type", "season"]
+    }
+  },
+  "media": {}
+}

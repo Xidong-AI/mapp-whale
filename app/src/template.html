@@ -1,0 +1,445 @@
+<div class="app" id="app">
+  <div class="aurora" aria-hidden="true">
+    <span class="aurora__orb aurora__orb--one"></span>
+    <span class="aurora__orb aurora__orb--two"></span>
+    <span class="aurora__orb aurora__orb--three"></span>
+    <span class="aurora__grid"></span>
+  </div>
+
+  <svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+    <symbol id="glyph-whale" viewBox="0 0 48 48">
+      <path d="M43 28c0-8-8-14-18-14-6 0-11 2-14 6l-5-6c-2 5-1 11 3 15l6-3c3 5 8 8 14 8 8 0 14-2 14-6Z" fill="currentColor"/>
+      <circle cx="33" cy="22" r="1.7" fill="var(--abyss)"/>
+      <path d="M12 17c2-5 6-8 11-9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="glyph-compass" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <path d="m15.5 8.5-2.2 5-4.8 2.2 2.2-5Z" fill="currentColor"/>
+    </symbol>
+  </svg>
+
+  <header class="masthead">
+    <div class="masthead__inner">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><use href="#glyph-whale"></use></svg>
+        </span>
+        <span class="brand__words">
+          <strong id="brand-name" data-text="meta.name">预言鲸</strong>
+          <em data-text="meta.tagline">把判断交给深海</em>
+        </span>
+      </div>
+      <div class="masthead__side">
+        <span class="pill" id="connection" role="status" data-text="connection.connecting">连接社区…</span>
+        <span class="balance" id="balance-box" hidden>
+          <i class="balance__bead" aria-hidden="true"></i>
+          <span class="balance__label" data-text="common.chips">鲸珠</span>
+          <strong class="num" id="balance">—</strong>
+        </span>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="主导航">
+      <button type="button" data-tab="markets" aria-current="page">
+        <span class="tabs__dot" aria-hidden="true"></span><span data-text="nav.markets">市场</span>
+      </button>
+      <button type="button" data-tab="leaderboard">
+        <span class="tabs__dot" aria-hidden="true"></span><span data-text="nav.leaderboard">排行榜</span>
+      </button>
+      <button type="button" data-tab="me">
+        <span class="tabs__dot" aria-hidden="true"></span><span data-text="nav.me">我的</span>
+      </button>
+    </nav>
+  </header>
+
+  <div class="shell">
+    <div class="banner" id="banner" role="status" hidden>
+      <span class="banner__dot" aria-hidden="true"></span>
+      <span class="banner__text" id="banner-text"></span>
+      <button type="button" class="banner__action" id="banner-retry" data-text="common.retry" hidden>重试</button>
+    </div>
+
+    <section class="view" id="view-markets" aria-labelledby="markets-title">
+      <header class="section-head">
+        <div class="section-head__copy">
+          <p class="eyebrow" id="markets-eyebrow" data-text="markets.eyebrow">第 2026-11 赛季</p>
+          <h1 class="display" id="markets-title" data-text="markets.heading">预测市场</h1>
+          <p class="intro" data-text="markets.intro">观察模型动向，把判断投入彩池。拖动信念，看你的鲸鱼一路进化。</p>
+        </div>
+        <button class="ghost" id="markets-refresh" type="button" data-text="common.refresh">刷新</button>
+      </header>
+
+      <div class="ticker" role="group" aria-label="市场概览">
+        <div class="ticker__item">
+          <span data-text="markets.summaryPool">彩池总计</span>
+          <strong class="num" id="summary-pool">—</strong>
+        </div>
+        <div class="ticker__item">
+          <span data-text="markets.summaryOpen">进行中</span>
+          <strong class="num" id="summary-open">—</strong>
+        </div>
+        <div class="ticker__item">
+          <span data-text="markets.summarySeason">当前赛季</span>
+          <strong class="num" id="summary-season">—</strong>
+        </div>
+      </div>
+
+      <div class="market-grid" id="markets-list"></div>
+
+      <div class="state" id="markets-loading" hidden>
+        <div class="market-card skeleton" aria-hidden="true">
+          <span class="skeleton__line skeleton__line--short"></span>
+          <span class="skeleton__line skeleton__line--title"></span>
+          <span class="skeleton__line"></span>
+          <span class="skeleton__line skeleton__line--mid"></span>
+          <span class="skeleton__block"></span>
+        </div>
+        <div class="market-card skeleton" aria-hidden="true">
+          <span class="skeleton__line skeleton__line--short"></span>
+          <span class="skeleton__line skeleton__line--title"></span>
+          <span class="skeleton__line"></span>
+          <span class="skeleton__line skeleton__line--mid"></span>
+          <span class="skeleton__block"></span>
+        </div>
+        <span class="sr-only" data-text="markets.loadingLabel">正在读取市场</span>
+      </div>
+
+      <div class="state state--empty" id="markets-empty" hidden>
+        <svg class="state__glyph" viewBox="0 0 48 48" aria-hidden="true"><use href="#glyph-whale"></use></svg>
+        <strong data-text="markets.emptyTitle">海面暂时平静</strong>
+        <span data-text="markets.emptyBody">新的预测市场正在路上，稍后再来看看。</span>
+      </div>
+
+      <div class="state state--error" id="markets-error" hidden>
+        <strong data-text="markets.errorTitle">市场数据没有浮上来</strong>
+        <span id="markets-error-text" data-text="markets.errorBody">检查网络后重试，已缓存的行情会继续显示。</span>
+        <button class="ghost" type="button" id="markets-error-retry" data-text="common.retry">重试</button>
+      </div>
+
+      <div class="view__foot">
+        <button class="ghost" type="button" id="markets-more" hidden data-text="common.loadMore">加载更多</button>
+      </div>
+    </section>
+
+    <section class="view view--detail" id="view-detail" aria-labelledby="detail-title" hidden>
+      <button class="back" id="detail-back" type="button">
+        <span aria-hidden="true">←</span><span data-text="detail.back">返回市场</span>
+      </button>
+
+      <div class="state" id="detail-loading" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <span data-text="common.loading">正在加载…</span>
+      </div>
+
+      <div class="state state--error" id="detail-error" hidden>
+        <strong data-text="markets.errorTitle">市场数据没有浮上来</strong>
+        <span id="detail-error-text"></span>
+        <div class="state__actions">
+          <button class="ghost" type="button" id="detail-retry" data-text="common.retry">重试</button>
+          <button class="ghost" type="button" id="detail-error-back" data-text="detail.back">返回市场</button>
+        </div>
+      </div>
+
+      <div class="detail-body" id="detail-body" hidden>
+        <div class="detail-grid">
+          <article class="detail-main">
+            <div class="detail-meta">
+              <span id="detail-status" class="tag tag--open"><i aria-hidden="true"></i><span></span></span>
+              <span class="countdown" id="detail-countdown"></span>
+            </div>
+            <h1 class="display display--detail" id="detail-title">市场详情</h1>
+            <p class="detail-desc" id="detail-desc"></p>
+
+            <div class="stage">
+              <div class="stage__rings" aria-hidden="true">
+                <i></i><i></i><i></i>
+              </div>
+              <div class="whale" id="whale" data-direction="0" data-stage="0">
+                <svg class="whale__svg" viewBox="0 0 260 180" role="img" aria-labelledby="whale-title">
+                  <title id="whale-title">小鲸鱼</title>
+                  <defs>
+                    <linearGradient id="whale-skin" x1="0.2" y1="0" x2="0.5" y2="1">
+                      <stop offset="0" class="whale__stop-a"></stop>
+                      <stop offset="1" class="whale__stop-b"></stop>
+                    </linearGradient>
+                    <linearGradient id="whale-belly" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" class="whale__stop-c"></stop>
+                      <stop offset="1" class="whale__stop-d"></stop>
+                    </linearGradient>
+                    <radialGradient id="whale-aura">
+                      <stop offset="0" class="whale__aura-stop"></stop>
+                      <stop offset="1" stop-color="transparent"></stop>
+                    </radialGradient>
+                  </defs>
+                  <ellipse class="whale__aura" cx="138" cy="96" rx="104" ry="76" fill="url(#whale-aura)"></ellipse>
+                  <g class="whale__crown" aria-hidden="true">
+                    <path d="M 142 50 L 142 34 L 152 42 L 162 30 L 172 42 L 182 34 L 182 50 Z"></path>
+                    <circle cx="152" cy="45" r="2"></circle>
+                    <circle cx="162" cy="42" r="2.4"></circle>
+                    <circle cx="172" cy="45" r="2"></circle>
+                  </g>
+                  <g class="whale__body-group">
+                    <path class="whale__dorsal" d="M 96 60 C 100 46 108 38 118 36 C 112 45 108 53 107 62 Z"></path>
+                    <path class="whale__tail" d="M 66 96 C 50 94 36 82 27 64 C 43 67 56 77 65 89 C 61 74 63 57 72 44 C 80 60 82 78 78 94 C 84 85 94 77 106 72 C 98 88 85 99 70 104 Z"></path>
+                    <path class="whale__body" d="M 62 98 C 62 72 92 54 132 54 C 172 54 206 68 216 96 C 222 114 210 128 188 132 C 156 138 118 136 92 126 C 72 118 62 108 62 98 Z" fill="url(#whale-skin)"></path>
+                    <path class="whale__belly" d="M 82 118 C 106 132 148 134 180 126 C 198 122 208 114 214 104 C 216 118 204 130 184 134 C 152 140 112 136 88 126 C 84 123 82 121 82 118 Z" fill="url(#whale-belly)"></path>
+                    <path class="whale__fin" d="M 122 126 C 118 142 108 152 96 154 C 102 142 106 134 108 122 Z"></path>
+                    <path class="whale__smile" d="M 196 106 Q 204 112 212 107" fill="none"></path>
+                    <circle class="whale__eye" cx="184" cy="90" r="5"></circle>
+                    <circle class="whale__eye-glint" cx="186" cy="88" r="1.6"></circle>
+                    <g class="whale__spout" aria-hidden="true">
+                      <path d="M 150 52 C 145 40 151 31 160 27" fill="none"></path>
+                      <path d="M 150 52 C 141 45 137 36 139 27" fill="none"></path>
+                    </g>
+                  </g>
+                  <g class="whale__bubbles" aria-hidden="true">
+                    <circle class="whale__bubble whale__bubble--1" cx="86" cy="62" r="4"></circle>
+                    <circle class="whale__bubble whale__bubble--2" cx="72" cy="44" r="2.5"></circle>
+                    <circle class="whale__bubble whale__bubble--3" cx="216" cy="62" r="3"></circle>
+                    <circle class="whale__bubble whale__bubble--4" cx="226" cy="80" r="2"></circle>
+                  </g>
+                </svg>
+              </div>
+              <div class="stage__caption">
+                <span class="stage__index num" id="stage-index">01 / 05</span>
+                <strong class="stage__name display" id="stage-name">幼鲸</strong>
+                <span class="stage__hint" id="stage-hint">中性水域</span>
+              </div>
+            </div>
+
+            <div class="slider-block">
+              <div class="slider-block__head">
+                <label for="confidence" data-text="detail.confidence">信念强度</label>
+                <output class="confidence num" id="confidence-value" for="confidence">0</output>
+              </div>
+              <input class="slider" id="confidence" type="range" min="-100" max="100" step="1" value="0" aria-describedby="slider-help" />
+              <div class="slider__scale" aria-hidden="true">
+                <span data-text="detail.bearish">强烈看跌</span>
+                <span data-text="detail.neutral">中性</span>
+                <span data-text="detail.bullish">强烈看涨</span>
+              </div>
+              <p class="hint" id="slider-help" data-text="detail.sliderHelp">拖动滑块选择方向与强度。松开不会自动提交，确认后再投入。</p>
+            </div>
+          </article>
+
+          <aside class="bet-card" id="bet-card">
+            <div class="bet-card__head">
+              <span class="eyebrow" data-text="detail.ticket">预测单</span>
+              <span class="tag tag--idle" id="bet-side"><span></span></span>
+            </div>
+
+            <div class="bet-form" id="bet-form">
+              <label class="field" for="amount">
+                <span class="field__label" data-text="detail.amount">投入鲸珠</span>
+                <input class="field__input num" id="amount" type="number" inputmode="numeric" step="1" min="10" value="10" autocomplete="off" aria-describedby="amount-hint" />
+              </label>
+              <div class="quick" id="quick-amounts">
+                <button type="button" data-quick="min" data-text="detail.quickMin">最小</button>
+                <button type="button" data-quick="half" data-text="detail.quickHalf">一半</button>
+                <button type="button" data-quick="max" data-text="detail.quickMax">最大</button>
+              </div>
+              <p class="hint" id="amount-hint"></p>
+              <dl class="quote">
+                <div class="quote__row">
+                  <dt data-text="detail.multiplier">预期回报</dt>
+                  <dd class="num" id="quote-multiplier">—</dd>
+                </div>
+                <div class="quote__row">
+                  <dt data-text="detail.return">若命中约得</dt>
+                  <dd class="num" id="quote-return">—</dd>
+                </div>
+              </dl>
+              <p class="quote__note" data-text="detail.quoteNote">按当前彩池估算，结算时以实际彩池为准。</p>
+              <button class="primary" id="submit-bet" type="button" data-text="detail.submit">确认预测</button>
+              <p class="hint hint--center" id="bet-hint" role="status" aria-live="polite"></p>
+            </div>
+
+            <div class="gate" id="bet-gate" hidden>
+              <svg class="gate__glyph" viewBox="0 0 48 48" aria-hidden="true"><use href="#glyph-whale"></use></svg>
+              <strong data-text="detail.gateTitle">登录后即可投入</strong>
+              <p data-text="detail.gateBody">匿名访客可以浏览市场与排行榜。请在 Linux.do 登录后重新打开「预言鲸」。</p>
+            </div>
+
+            <div class="gate gate--closed" id="bet-closed" hidden>
+              <strong data-text="detail.closedNote">市场已截止，无法继续投入。</strong>
+              <p id="bet-closed-result"></p>
+            </div>
+          </aside>
+        </div>
+
+        <div class="detail-extra">
+          <section class="panel consensus" aria-labelledby="consensus-title">
+            <div class="panel__head">
+              <h2 id="consensus-title" data-text="detail.consensusTitle">社区共识</h2>
+              <span class="eyebrow" id="consensus-eyebrow"></span>
+            </div>
+            <div class="consensus__bar" aria-hidden="true">
+              <span class="consensus__yes" id="consensus-yes"></span>
+              <span class="consensus__no" id="consensus-no"></span>
+            </div>
+            <div class="consensus__labels">
+              <span><i class="dot dot--yes" aria-hidden="true"></i><span data-text="detail.sideYes">涨</span> <b class="num" id="consensus-yes-label">—</b></span>
+              <span><i class="dot dot--no" aria-hidden="true"></i><span data-text="detail.sideNo">跌</span> <b class="num" id="consensus-no-label">—</b></span>
+            </div>
+            <p class="consensus__note" data-text="detail.consensusNote">隐含看涨比例，含系统种子。</p>
+            <p class="consensus__pool" id="consensus-pool"></p>
+          </section>
+
+          <section class="panel timeline" aria-labelledby="timeline-title">
+            <div class="panel__head">
+              <h2 id="timeline-title" data-text="detail.timelineTitle">市场进程</h2>
+            </div>
+            <ol class="timeline__list" id="timeline-list"></ol>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-leaderboard" aria-labelledby="leaderboard-title" hidden>
+      <header class="section-head">
+        <div class="section-head__copy">
+          <p class="eyebrow" id="leaderboard-eyebrow" data-text="leaderboard.eyebrow">第 2026-11 赛季</p>
+          <h1 class="display" id="leaderboard-title" data-text="leaderboard.heading">排行榜</h1>
+          <p class="intro" data-text="leaderboard.intro">赛季内按总资产或命中率排名，匿名也可以围观。</p>
+        </div>
+        <button class="ghost" id="leaderboard-refresh" type="button" data-text="common.refresh">刷新</button>
+      </header>
+
+      <div class="board-controls">
+        <div class="segmented" id="board-types" role="group" aria-label="排行榜类型">
+          <button type="button" data-board="assets" aria-pressed="true" data-text="leaderboard.assets">总资产</button>
+          <button type="button" data-board="accuracy" aria-pressed="false" data-text="leaderboard.accuracy">命中率</button>
+        </div>
+        <div class="seasons" id="season-tabs" role="group" aria-label="赛季"></div>
+      </div>
+
+      <div class="my-rank" id="my-rank" hidden>
+        <span class="my-rank__label" data-text="leaderboard.myRank">我的名次</span>
+        <strong class="num" id="my-rank-value">—</strong>
+        <span class="my-rank__hint" id="my-rank-hint"></span>
+      </div>
+
+      <div class="podium" id="podium"></div>
+      <div class="rank-list" id="rank-list"></div>
+
+      <div class="state" id="leaderboard-loading" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <span data-text="leaderboard.reading">正在读取榜单</span>
+      </div>
+      <div class="state state--empty" id="leaderboard-empty" hidden>
+        <svg class="state__glyph" viewBox="0 0 48 48" aria-hidden="true"><use href="#glyph-whale"></use></svg>
+        <strong data-text="leaderboard.emptyTitle">这一季还没有排名</strong>
+        <span data-text="leaderboard.emptyBody">完成第一笔预测，就能出现在这里。</span>
+      </div>
+      <div class="state state--error" id="leaderboard-error" hidden>
+        <strong data-text="errors.loadLeaderboard">排行榜加载失败</strong>
+        <span id="leaderboard-error-text"></span>
+        <button class="ghost" type="button" id="leaderboard-error-retry" data-text="common.retry">重试</button>
+      </div>
+    </section>
+
+    <section class="view" id="view-me" aria-labelledby="me-title" hidden>
+      <header class="section-head">
+        <div class="section-head__copy">
+          <p class="eyebrow" id="me-eyebrow" data-text="me.eyebrow">第 2026-11 赛季</p>
+          <h1 class="display" id="me-title" data-text="me.heading">我的</h1>
+        </div>
+      </header>
+
+      <div class="gate gate--profile" id="me-gate" hidden>
+        <svg class="gate__glyph" viewBox="0 0 48 48" aria-hidden="true"><use href="#glyph-whale"></use></svg>
+        <strong data-text="me.guestTitle">登录后查看我的数据</strong>
+        <p data-text="me.guestBody">匿名访客可以浏览市场与排行榜。请在 Linux.do 登录后重新打开「预言鲸」，即可领取鲸珠、查看持仓与历史。</p>
+        <button class="primary" type="button" id="me-gate-markets" data-text="me.goMarkets">去逛市场</button>
+      </div>
+
+      <div id="me-content" hidden>
+        <section class="profile-card" aria-labelledby="me-name">
+          <div class="profile-card__id">
+            <span class="avatar" id="me-avatar-wrap">
+              <img id="me-avatar" alt="" hidden />
+              <span id="me-initials">鲸</span>
+            </span>
+            <div class="profile-card__who">
+              <strong id="me-name">—</strong>
+              <span id="me-season" data-text="me.seasonLine">第 2026-11 赛季</span>
+            </div>
+          </div>
+          <div class="profile-card__balance">
+            <span data-text="me.chipsLabel">当前鲸珠</span>
+            <strong class="num" id="me-chips">—</strong>
+            <span class="profile-card__unit" data-text="common.chips">鲸珠</span>
+          </div>
+          <div class="profile-card__claim">
+            <button class="primary" id="claim" type="button">领取每日鲸珠</button>
+            <p class="hint" id="claim-hint" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="stats-title">
+          <div class="panel__head">
+            <h2 id="stats-title" data-text="me.statsTitle">赛季数据</h2>
+          </div>
+          <dl class="stat-grid">
+            <div><dt data-text="me.staked">投入</dt><dd class="num" id="stat-staked">—</dd></div>
+            <div><dt data-text="me.payout">收回</dt><dd class="num" id="stat-payout">—</dd></div>
+            <div><dt data-text="me.correct">命中</dt><dd class="num" id="stat-correct">—</dd></div>
+            <div><dt data-text="me.accuracy">命中率</dt><dd class="num" id="stat-accuracy">—</dd></div>
+          </dl>
+        </section>
+
+        <div class="me-grid">
+          <section class="panel rank-panel" aria-labelledby="my-rank-title">
+            <div class="panel__head">
+              <h2 id="my-rank-title" data-text="me.rankTitle">我的排名</h2>
+              <button class="link" type="button" id="me-open-leaderboard" data-text="me.viewLeaderboard">查看排行榜</button>
+            </div>
+            <div class="rank-panel__rows">
+              <div class="rank-panel__row">
+                <span data-text="me.rankAssets">总资产榜</span>
+                <strong class="num" id="me-rank-assets">—</strong>
+              </div>
+              <div class="rank-panel__row">
+                <span data-text="me.rankAccuracy">命中率榜</span>
+                <strong class="num" id="me-rank-accuracy">—</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="records-title">
+            <div class="panel__head">
+              <h2 id="records-title" data-text="me.positionsTitle">持仓</h2>
+              <div class="segmented segmented--small" id="me-tabs" role="group" aria-label="我的记录">
+                <button type="button" data-me-tab="positions" aria-pressed="true" data-text="me.tabPositions">持仓</button>
+                <button type="button" data-me-tab="history" aria-pressed="false" data-text="me.tabHistory">历史</button>
+              </div>
+            </div>
+            <div class="records" id="me-records"></div>
+            <div class="state state--compact" id="me-records-loading" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <span data-text="common.loading">正在加载…</span>
+            </div>
+            <div class="state state--compact state--empty" id="me-records-empty" hidden>
+              <span id="me-records-empty-title" data-text="me.positionsEmpty">还没有持仓</span>
+              <span id="me-records-empty-hint" data-text="me.positionsEmptyHint">去市场挑一个判断吧。</span>
+              <button class="ghost" type="button" id="me-records-markets" data-text="me.goMarkets">去逛市场</button>
+            </div>
+            <div class="state state--compact state--error" id="me-records-error" hidden>
+              <span id="me-records-error-text"></span>
+              <button class="ghost" type="button" id="me-records-retry" data-text="common.retry">重试</button>
+            </div>
+            <div class="view__foot">
+              <button class="ghost" type="button" id="me-records-more" hidden data-text="common.loadMore">加载更多</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span data-text="meta.footer">鲸珠为虚拟筹码，不涉及真实财物。</span>
+      <span class="footer__season" id="footer-season"></span>
+    </footer>
+  </div>
+
+  <div class="toast-stack" id="toasts" aria-live="polite" aria-atomic="false"></div>
+</div>

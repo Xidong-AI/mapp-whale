@@ -1,0 +1,25 @@
+{
+  "name": "@xidong/whale-forecast",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --bun vite",
+    "build": "bun run typecheck && bun --bun vite build && bun run scripts/package.ts",
+    "test": "bun test test",
+    "typecheck": "tsc -p tsconfig.json",
+    "preview": "bun --bun vite preview"
+  },
+  "dependencies": {
+    "@discourse-mini-app/sdk": "file:../vendor/sdk"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.3",
+    "@types/node": "24.10.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.5"
+  },
+  "engines": {
+    "bun": ">=1.2.0"
+  }
+}
