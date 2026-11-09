@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.log
+.DS_Store
+
+# 本地私密运维脚本（含凭证路径）只留在上层工作区
+scripts/push-xidongbot.sh
