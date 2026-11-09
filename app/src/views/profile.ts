@@ -2,7 +2,7 @@ import { CACHE_TTL } from "../config.ts";
 import { PAGE_SIZE } from "../config.ts";
 import type { AppContext } from "../context.ts";
 import { t } from "../copy.ts";
-import { byId, clear, el, setText, show, statusTag } from "../dom.ts";
+import { byId, clear, el, makeIcon, setText, show, statusTag } from "../dom.ts";
 import { describeError } from "../errors.ts";
 import {
   currentSeason,
@@ -58,6 +58,7 @@ export function createProfileView(ctx: AppContext): ProfileView {
   const seasonNode = byId("me-season");
   const chipsNode = byId("me-chips");
   const claimButton = byId<HTMLButtonElement>("claim");
+  const claimText = byId("claim-text");
   const claimHint = byId("claim-hint");
 
   const stakedNode = byId("stat-staked");
@@ -131,29 +132,29 @@ export function createProfileView(ctx: AppContext): ProfileView {
     const config = ctx.getConfig();
     claimHint.classList.toggle("hint--error", Boolean(claimError));
     if (claimError) {
-      claimButton.textContent = t("me.claim", { amount: config.dailyChips });
+      setText(claimText, t("me.claim", { amount: config.dailyChips }));
       claimButton.disabled = claiming || !me;
       setText(claimHint, claimError);
       return;
     }
     if (claiming) {
-      claimButton.textContent = t("me.claimPending");
+      setText(claimText, t("me.claimPending"));
       claimButton.disabled = true;
       setText(claimHint, t("common.loading"));
       return;
     }
     if (!me) {
-      claimButton.textContent = t("me.claim", { amount: config.dailyChips });
+      setText(claimText, t("me.claim", { amount: config.dailyChips }));
       claimButton.disabled = true;
       setText(claimHint, "");
       return;
     }
     if (me.canClaim) {
-      claimButton.textContent = t("me.claim", { amount: config.dailyChips });
+      setText(claimText, t("me.claim", { amount: config.dailyChips }));
       claimButton.disabled = false;
       setText(claimHint, "");
     } else {
-      claimButton.textContent = t("me.claimed");
+      setText(claimText, t("me.claimed"));
       claimButton.disabled = true;
       setText(
         claimHint,
@@ -225,8 +226,11 @@ export function createProfileView(ctx: AppContext): ProfileView {
     const side = el("div", "record__side");
     const sideWord = el(
       "b",
-      row.side === "yes" ? "is-yes" : "is-no",
-      sideLabel(row.side)
+      row.side === "yes" ? "is-yes" : "is-no"
+    );
+    sideWord.append(
+      makeIcon(row.side === "yes" ? "i-up" : "i-down"),
+      document.createTextNode(sideLabel(row.side))
     );
     side.append(sideWord);
     primary.append(el("div", "record__title", titleText), side);

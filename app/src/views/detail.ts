@@ -1,7 +1,7 @@
 import { CACHE_KEYS } from "../cache.ts";
 import { t } from "../copy.ts";
 import type { AppContext } from "../context.ts";
-import { byId, clear, el, setText, show } from "../dom.ts";
+import { byId, clear, el, makeIcon, setText, show } from "../dom.ts";
 import {
   ApiError,
   describeError,
@@ -77,11 +77,10 @@ export function createDetailView(ctx: AppContext): DetailView {
   const desc = byId("detail-desc");
 
   const whale = byId("whale");
-  const whaleTitle = byId("whale-title");
+  const whaleTitle = byId<HTMLElement>("whale-title");
   const stageIndex = byId("stage-index");
   const stageName = byId("stage-name");
   const stageHintNode = byId("stage-hint");
-
   const sliderBlock = document.querySelector<HTMLElement>(".slider-block");
   if (!sliderBlock) throw new Error("Missing .slider-block");
   const sliderBlockNode: HTMLElement = sliderBlock;
@@ -136,30 +135,16 @@ export function createDetailView(ctx: AppContext): DetailView {
 
   function setBetSide(label: string, tone: "yes" | "no" | "idle"): void {
     betSide.className = `tag tag--${tone}`;
-    betSide.textContent = label;
+    betSide.replaceChildren(
+      ...(tone === "idle" ? [] : [makeIcon(tone === "yes" ? "i-up" : "i-down")]),
+      document.createTextNode(label)
+    );
   }
 
   function updateWhale(confidence: number): void {
     const stage = stageFor(confidence);
     whale.dataset.direction = String(stage.direction);
     whale.dataset.stage = String(stage.index);
-    const progress = stage.intensity;
-    whale.style.setProperty("--whale-scale", (0.9 + progress * 0.22).toFixed(3));
-    whale.style.setProperty(
-      "--whale-drift",
-      `${
-        stage.direction > 0 ? -progress * 8 : stage.direction < 0 ? progress * 11 : 0
-      }px`
-    );
-    whale.style.setProperty(
-      "--whale-tilt",
-      `${stage.direction < 0 ? -progress * 5 : 0}deg`
-    );
-    whale.style.setProperty(
-      "--whale-glow-op",
-      (0.16 + progress * 0.55).toFixed(3)
-    );
-    whale.style.setProperty("--whale-intensity", progress.toFixed(3));
 
     const hint = stageHint(stage.direction, stage.index);
     setText(
@@ -177,6 +162,9 @@ export function createDetailView(ctx: AppContext): DetailView {
 
     sliderBlockNode.classList.toggle("is-bear", stage.direction < 0);
     sliderBlockNode.classList.toggle("is-bull", stage.direction > 0);
+    const stageNode = whale.closest(".stage");
+    stageNode?.classList.toggle("is-bear", stage.direction < 0);
+    stageNode?.classList.toggle("is-bull", stage.direction > 0);
     slider.classList.toggle("is-bear", stage.direction < 0);
     slider.classList.toggle("is-bull", stage.direction > 0);
     confidenceValue.textContent = formatConfidence(confidence);

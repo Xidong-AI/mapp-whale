@@ -1,20 +1,65 @@
 <div class="app" id="app">
-  <div class="aurora" aria-hidden="true">
-    <span class="aurora__orb aurora__orb--one"></span>
-    <span class="aurora__orb aurora__orb--two"></span>
-    <span class="aurora__orb aurora__orb--three"></span>
-    <span class="aurora__grid"></span>
-  </div>
-
   <svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
-    <symbol id="glyph-whale" viewBox="0 0 48 48">
-      <path d="M43 28c0-8-8-14-18-14-6 0-11 2-14 6l-5-6c-2 5-1 11 3 15l6-3c3 5 8 8 14 8 8 0 14-2 14-6Z" fill="currentColor"/>
-      <circle cx="33" cy="22" r="1.7" fill="var(--abyss)"/>
-      <path d="M12 17c2-5 6-8 11-9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    <symbol id="i-market" viewBox="0 0 24 24">
+      <path d="M3.5 20.5h17"/>
+      <path d="M5 16l4-4.5 3.5 3L19 7"/>
+      <circle cx="9" cy="11.5" r="1.4" fill="currentColor" stroke="none"/>
+      <circle cx="12.5" cy="14.5" r="1.4" fill="currentColor" stroke="none"/>
+      <circle cx="19" cy="7" r="1.4" fill="currentColor" stroke="none"/>
     </symbol>
-    <symbol id="glyph-compass" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/>
-      <path d="m15.5 8.5-2.2 5-4.8 2.2 2.2-5Z" fill="currentColor"/>
+    <symbol id="i-board" viewBox="0 0 24 24">
+      <path d="M3.5 20.5h17"/>
+      <path d="M5 20.5V15h4.5v5.5"/>
+      <path d="M10 20.5V8h4.5v12.5"/>
+      <path d="M15.5 20.5V12H20v8.5"/>
+      <path d="M12 2.4l.72 1.5 1.65.21-1.22 1.16.31 1.63L12 6.14l-1.46.76.31-1.63-1.22-1.16 1.65-.21Z"/>
+    </symbol>
+    <symbol id="i-user" viewBox="0 0 24 24">
+      <circle cx="12" cy="8.2" r="3.5"/>
+      <path d="M5.2 20c.9-3.5 3.7-5.3 6.8-5.3s5.9 1.8 6.8 5.3"/>
+    </symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24">
+      <path d="M20 11.5a8 8 0 1 1-2.5-5.8"/>
+      <path d="M20 4.6v4.2h-4.2"/>
+    </symbol>
+    <symbol id="i-back" viewBox="0 0 24 24">
+      <path d="M19.5 12H5"/>
+      <path d="M11 6l-6 6 6 6"/>
+    </symbol>
+    <symbol id="i-up" viewBox="0 0 24 24">
+      <path d="M4.5 16.5l4.8-4.8 3.4 3.4 6.3-7.3"/>
+      <path d="M14.3 7.8H19v4.7"/>
+    </symbol>
+    <symbol id="i-down" viewBox="0 0 24 24">
+      <path d="M4.5 7.5l4.8 4.8 3.4-3.4 6.3 7.3"/>
+      <path d="M14.3 16.2H19v-4.7"/>
+    </symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8.4"/>
+      <path d="M12 7.6V12l3.1 1.9"/>
+    </symbol>
+    <symbol id="i-pearl" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="7.6"/>
+      <path d="M8.4 10.2A4.4 4.4 0 0 1 11 7.7"/>
+    </symbol>
+    <symbol id="i-claim" viewBox="0 0 24 24">
+      <path d="M12 3.5V12"/>
+      <path d="M8.6 8.6 12 12l3.4-3.4"/>
+      <path d="M4.5 13h3.4l1.5 2.4h5.2l1.5-2.4h3.4v4.6a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2Z"/>
+    </symbol>
+    <symbol id="i-whale" viewBox="0 0 24 24">
+      <path d="M4.2 14.2C4.8 9.4 8.6 6.2 13 6.2c4.3 0 7.6 2.6 7.9 6.1.2 2-1.5 3.5-4 3.5H8.4"/>
+      <path d="M4.2 14.2 2.6 11M4.2 14.2l-1 3"/>
+      <path d="M13.6 6.1c-.2-1.3.4-2.4 1.5-3"/>
+      <circle cx="16.4" cy="10.6" r="1.1" fill="currentColor" stroke="none"/>
+    </symbol>
+    <!-- 鲸鱼共用骨架：体型/尾鳍/腹鳍/嘴线，各阶段在自身 SVG 上叠细节 -->
+    <symbol id="whale-base" viewBox="0 0 240 160">
+      <path class="wa-tail" d="M58 82C46 68 33 60 19 61c8 9 16 19 20 29-6 10-14 18-24 21 11 4 29 0 41-13"/>
+      <path class="wa-fill" d="M56 86c14-30 54-46 94-44 40 2 64 26 62 50-2 22-28 34-64 34-36 0-70-8-88-28-3-4-4-8-4-12Z"/>
+      <path class="wa-body" d="M56 86c14-30 54-46 94-44 40 2 64 26 62 50-2 22-28 34-64 34-36 0-70-8-88-28-3-4-4-8-4-12Z"/>
+      <path class="wa-fin" d="M124 122c-2 12-10 20-20 24 6-9 10-17 10-25"/>
+      <path class="wa-mouth" d="M192 102c5 5 12 6 17 2"/>
     </symbol>
   </svg>
 
@@ -22,7 +67,7 @@
     <div class="masthead__inner">
       <div class="brand">
         <span class="brand__mark" aria-hidden="true">
-          <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><use href="#glyph-whale"></use></svg>
+          <svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-whale"></use></svg>
         </span>
         <span class="brand__words">
           <strong id="brand-name" data-text="meta.name">预言鲸</strong>
@@ -32,7 +77,7 @@
       <div class="masthead__side">
         <span class="pill" id="connection" role="status" data-text="connection.connecting">连接社区…</span>
         <span class="balance" id="balance-box" hidden>
-          <i class="balance__bead" aria-hidden="true"></i>
+          <svg class="ic balance__bead" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-pearl"></use></svg>
           <span class="balance__label" data-text="common.chips">鲸珠</span>
           <strong class="num" id="balance">—</strong>
         </span>
@@ -40,13 +85,13 @@
     </div>
     <nav class="tabs" id="tabs" aria-label="主导航">
       <button type="button" data-tab="markets" aria-current="page">
-        <span class="tabs__dot" aria-hidden="true"></span><span data-text="nav.markets">市场</span>
+        <svg class="ic tabs__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-market"></use></svg><span data-text="nav.markets">市场</span>
       </button>
       <button type="button" data-tab="leaderboard">
-        <span class="tabs__dot" aria-hidden="true"></span><span data-text="nav.leaderboard">排行榜</span>
+        <svg class="ic tabs__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-board"></use></svg><span data-text="nav.leaderboard">排行榜</span>
       </button>
       <button type="button" data-tab="me">
-        <span class="tabs__dot" aria-hidden="true"></span><span data-text="nav.me">我的</span>
+        <svg class="ic tabs__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-user"></use></svg><span data-text="nav.me">我的</span>
       </button>
     </nav>
   </header>
@@ -55,7 +100,7 @@
     <div class="banner" id="banner" role="status" hidden>
       <span class="banner__dot" aria-hidden="true"></span>
       <span class="banner__text" id="banner-text"></span>
-      <button type="button" class="banner__action" id="banner-retry" data-text="common.retry" hidden>重试</button>
+      <button type="button" class="banner__action" id="banner-retry" hidden><span data-text="common.retry">重试</span></button>
     </div>
 
     <section class="view" id="view-markets" aria-labelledby="markets-title">
@@ -65,7 +110,9 @@
           <h1 class="display" id="markets-title" data-text="markets.heading">预测市场</h1>
           <p class="intro" data-text="markets.intro">观察模型动向，把判断投入彩池。拖动信念，看你的鲸鱼一路进化。</p>
         </div>
-        <button class="ghost" id="markets-refresh" type="button" data-text="common.refresh">刷新</button>
+        <button class="ghost" id="markets-refresh" type="button">
+          <svg class="ic btn__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg><span data-text="common.refresh">刷新</span>
+        </button>
       </header>
 
       <div class="ticker" role="group" aria-label="市场概览">
@@ -104,7 +151,7 @@
       </div>
 
       <div class="state state--empty" id="markets-empty" hidden>
-        <svg class="state__glyph" viewBox="0 0 48 48" aria-hidden="true"><use href="#glyph-whale"></use></svg>
+        <svg class="ic state__glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-whale"></use></svg>
         <strong data-text="markets.emptyTitle">海面暂时平静</strong>
         <span data-text="markets.emptyBody">新的预测市场正在路上，稍后再来看看。</span>
       </div>
@@ -122,7 +169,7 @@
 
     <section class="view view--detail" id="view-detail" aria-labelledby="detail-title" hidden>
       <button class="back" id="detail-back" type="button">
-        <span aria-hidden="true">←</span><span data-text="detail.back">返回市场</span>
+        <svg class="ic btn__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-back"></use></svg><span data-text="detail.back">返回市场</span>
       </button>
 
       <div class="state" id="detail-loading" hidden>
@@ -144,59 +191,153 @@
           <article class="detail-main">
             <div class="detail-meta">
               <span id="detail-status" class="tag tag--open"><i aria-hidden="true"></i><span></span></span>
-              <span class="countdown" id="detail-countdown"></span>
+              <span class="when">
+                <svg class="ic when__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-clock"></use></svg><span class="countdown" id="detail-countdown"></span>
+              </span>
             </div>
             <h1 class="display display--detail" id="detail-title">市场详情</h1>
             <p class="detail-desc" id="detail-desc"></p>
 
             <div class="stage">
-              <div class="stage__rings" aria-hidden="true">
-                <i></i><i></i><i></i>
-              </div>
-              <div class="whale" id="whale" data-direction="0" data-stage="0">
-                <svg class="whale__svg" viewBox="0 0 260 180" role="img" aria-labelledby="whale-title">
-                  <title id="whale-title">小鲸鱼</title>
-                  <defs>
-                    <linearGradient id="whale-skin" x1="0.2" y1="0" x2="0.5" y2="1">
-                      <stop offset="0" class="whale__stop-a"></stop>
-                      <stop offset="1" class="whale__stop-b"></stop>
-                    </linearGradient>
-                    <linearGradient id="whale-belly" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0" class="whale__stop-c"></stop>
-                      <stop offset="1" class="whale__stop-d"></stop>
-                    </linearGradient>
-                    <radialGradient id="whale-aura">
-                      <stop offset="0" class="whale__aura-stop"></stop>
-                      <stop offset="1" stop-color="transparent"></stop>
-                    </radialGradient>
-                  </defs>
-                  <ellipse class="whale__aura" cx="138" cy="96" rx="104" ry="76" fill="url(#whale-aura)"></ellipse>
-                  <g class="whale__crown" aria-hidden="true">
-                    <path d="M 142 50 L 142 34 L 152 42 L 162 30 L 172 42 L 182 34 L 182 50 Z"></path>
-                    <circle cx="152" cy="45" r="2"></circle>
-                    <circle cx="162" cy="42" r="2.4"></circle>
-                    <circle cx="172" cy="45" r="2"></circle>
+              <div class="whale" id="whale" data-direction="0" data-stage="0" role="img" aria-labelledby="whale-title">
+                <span class="sr-only" id="whale-title">幼鲸</span>
+
+                <svg class="whale-art whale-art--calve" viewBox="0 0 240 160" aria-hidden="true" focusable="false">
+                  <g class="wa" transform="translate(28 18) scale(0.76)">
+                    <use href="#whale-base"/>
+                    <path class="wa-scene" d="M28 144c20-8 40-8 60 0 20 8 40 8 60 0 20-8 40-8 60 0"/>
+                    <path class="wa-spout" d="M152 40c-3-7-1-13 4-16"/>
                   </g>
-                  <g class="whale__body-group">
-                    <path class="whale__dorsal" d="M 96 60 C 100 46 108 38 118 36 C 112 45 108 53 107 62 Z"></path>
-                    <path class="whale__tail" d="M 66 96 C 50 94 36 82 27 64 C 43 67 56 77 65 89 C 61 74 63 57 72 44 C 80 60 82 78 78 94 C 84 85 94 77 106 72 C 98 88 85 99 70 104 Z"></path>
-                    <path class="whale__body" d="M 62 98 C 62 72 92 54 132 54 C 172 54 206 68 216 96 C 222 114 210 128 188 132 C 156 138 118 136 92 126 C 72 118 62 108 62 98 Z" fill="url(#whale-skin)"></path>
-                    <path class="whale__belly" d="M 82 118 C 106 132 148 134 180 126 C 198 122 208 114 214 104 C 216 118 204 130 184 134 C 152 140 112 136 88 126 C 84 123 82 121 82 118 Z" fill="url(#whale-belly)"></path>
-                    <path class="whale__fin" d="M 122 126 C 118 142 108 152 96 154 C 102 142 106 134 108 122 Z"></path>
-                    <path class="whale__smile" d="M 196 106 Q 204 112 212 107" fill="none"></path>
-                    <circle class="whale__eye" cx="184" cy="90" r="5"></circle>
-                    <circle class="whale__eye-glint" cx="186" cy="88" r="1.6"></circle>
-                    <g class="whale__spout" aria-hidden="true">
-                      <path d="M 150 52 C 145 40 151 31 160 27" fill="none"></path>
-                      <path d="M 150 52 C 141 45 137 36 139 27" fill="none"></path>
-                    </g>
+                  <circle class="wa-eye" cx="164" cy="80" r="6.2"/>
+                  <circle class="wa-glint" cx="166.4" cy="77.6" r="1.9"/>
+                </svg>
+
+                <svg class="whale-art whale-art--small" viewBox="0 0 240 160" aria-hidden="true" focusable="false">
+                  <g class="wa">
+                    <use href="#whale-base"/>
+                    <path class="wa-scene" d="M28 144c20-8 40-8 60 0 20 8 40 8 60 0 20-8 40-8 60 0"/>
+                    <path class="wa-dorsal" d="M90 52c3-10 11-16 21-17-7 7-12 15-13 23"/>
+                    <path class="wa-groove" d="M100 114c24 8 58 8 86-4"/>
+                    <path class="wa-spout" d="M152 40c-4-9-1-17 7-21"/>
                   </g>
-                  <g class="whale__bubbles" aria-hidden="true">
-                    <circle class="whale__bubble whale__bubble--1" cx="86" cy="62" r="4"></circle>
-                    <circle class="whale__bubble whale__bubble--2" cx="72" cy="44" r="2.5"></circle>
-                    <circle class="whale__bubble whale__bubble--3" cx="216" cy="62" r="3"></circle>
-                    <circle class="whale__bubble whale__bubble--4" cx="226" cy="80" r="2"></circle>
+                  <circle class="wa-eye" cx="176" cy="82" r="5"/>
+                  <circle class="wa-glint" cx="178" cy="79.8" r="1.6"/>
+                </svg>
+
+                <svg class="whale-art whale-art--surge" viewBox="0 0 240 160" aria-hidden="true" focusable="false">
+                  <g class="wa" transform="rotate(-5 120 90)">
+                    <use href="#whale-base"/>
+                    <path class="wa-scene" d="M28 144c20-8 40-8 60 0 20 8 40 8 60 0 20-8 40-8 60 0"/>
+                    <path class="wa-scene" d="M64 154c12-5 24-5 36 0"/>
+                    <path class="wa-dorsal" d="M86 54c4-14 14-22 27-23-10 9-16 19-17 29"/>
+                    <path class="wa-groove" d="M100 114c24 8 58 8 86-4"/>
+                    <path class="wa-spout" d="M152 40c-4-9-1-17 7-21"/>
+                    <path class="wa-spout" d="M152 40c-6-6-13-10-21-11"/>
                   </g>
+                  <path class="wa-brow" d="M168 72l17-2"/>
+                  <circle class="wa-eye" cx="176" cy="82" r="4.6"/>
+                  <circle class="wa-glint" cx="178" cy="79.8" r="1.5"/>
+                </svg>
+
+                <svg class="whale-art whale-art--king" viewBox="0 0 240 160" aria-hidden="true" focusable="false">
+                  <g class="wa" transform="rotate(-3 120 90)">
+                    <use href="#whale-base"/>
+                    <path class="wa-scene" d="M28 144c20-8 40-8 60 0 20 8 40 8 60 0 20-8 40-8 60 0"/>
+                    <path class="wa-dorsal" d="M86 54c4-14 14-22 27-23-10 9-16 19-17 29"/>
+                    <path class="wa-crown" d="M118 32l2-18 9 10 9-14 9 14 9-10 2 18Z"/>
+                    <circle class="wa-dot" cx="129" cy="26" r="2"/>
+                    <circle class="wa-dot" cx="138" cy="20" r="2.4"/>
+                    <circle class="wa-dot" cx="147" cy="26" r="2"/>
+                    <path class="wa-groove" d="M100 114c24 8 58 8 86-4"/>
+                    <path class="wa-spout" d="M152 40c-4-9-1-17 7-21"/>
+                  </g>
+                  <path class="wa-brow" d="M168 72l17-2"/>
+                  <circle class="wa-eye" cx="176" cy="82" r="4.6"/>
+                  <circle class="wa-glint" cx="178" cy="79.8" r="1.5"/>
+                </svg>
+
+                <svg class="whale-art whale-art--ancestor" viewBox="0 0 240 160" aria-hidden="true" focusable="false">
+                  <g class="wa" transform="translate(-8 -4) scale(1.07)">
+                    <use href="#whale-base"/>
+                    <path class="wa-scene" d="M28 146c20-8 40-8 60 0 20 8 40 8 60 0 20-8 40-8 60 0"/>
+                    <path class="wa-dorsal" d="M84 56c4-16 16-26 30-27-11 10-18 21-19 32"/>
+                    <path class="wa-ray" d="M100 28l-7-6"/>
+                    <path class="wa-ray" d="M176 28l7-6"/>
+                    <path class="wa-ray" d="M123 6l-4-5"/>
+                    <path class="wa-ray" d="M153 6l4-5"/>
+                    <path class="wa-crown" d="M110 34l4-26 12 16 12-18 12 18 12-16 4 26Z"/>
+                    <circle class="wa-dot" cx="126" cy="27" r="2.2"/>
+                    <circle class="wa-dot" cx="138" cy="21" r="2.6"/>
+                    <circle class="wa-dot" cx="150" cy="27" r="2.2"/>
+                    <path class="wa-groove" d="M100 114c24 8 58 8 86-4"/>
+                    <path class="wa-baleen" d="M178 112c-6 10-15 17-26 21"/>
+                    <path class="wa-baleen" d="M186 110c-3 10-10 18-20 23"/>
+                    <path class="wa-baleen" d="M192 106c-1 10-4 18-10 25"/>
+                    <path class="wa-spout" d="M152 40c-4-9-1-17 7-21"/>
+                    <path class="wa-spout" d="M152 40c-6-6-13-10-21-11"/>
+                  </g>
+                  <path class="wa-brow" d="M166 70l20-2"/>
+                  <circle class="wa-eye" cx="176" cy="82" r="5"/>
+                  <circle class="wa-glint" cx="178" cy="79.8" r="1.6"/>
+                </svg>
+
+                <svg class="whale-art whale-art--dive" viewBox="0 0 240 160" aria-hidden="true" focusable="false">
+                  <g class="wa" transform="rotate(4 120 90)">
+                    <use href="#whale-base"/>
+                    <path class="wa-dorsal" d="M90 52c3-10 11-16 21-17-7 7-12 15-13 23"/>
+                    <path class="wa-groove" d="M100 114c24 8 58 8 86-4"/>
+                  </g>
+                  <path class="wa-lid" d="M170 82a6 6 0 0 1 12 0"/>
+                  <circle class="wa-eye" cx="176" cy="83" r="2.1"/>
+                  <circle class="wa-bubble" cx="84" cy="140" r="4"/>
+                  <circle class="wa-bubble" cx="72" cy="150" r="2.5"/>
+                </svg>
+
+                <svg class="whale-art whale-art--sink" viewBox="0 0 240 160" aria-hidden="true" focusable="false">
+                  <g class="wa" transform="rotate(7 120 90)">
+                    <use href="#whale-base"/>
+                    <path class="wa-dorsal" d="M92 54c2-9 8-15 16-17-6 7-10 14-11 21"/>
+                    <path class="wa-groove" d="M100 114c24 8 58 8 86-4"/>
+                  </g>
+                  <path class="wa-lid" d="M170 80c3 5 9 5 12 0"/>
+                  <circle class="wa-bubble" cx="84" cy="140" r="4"/>
+                  <circle class="wa-bubble" cx="72" cy="150" r="2.5"/>
+                  <circle class="wa-bubble" cx="196" cy="138" r="3"/>
+                </svg>
+
+                <svg class="whale-art whale-art--abyss" viewBox="0 0 240 160" aria-hidden="true" focusable="false">
+                  <g class="wa" transform="rotate(9 120 90)">
+                    <use href="#whale-base"/>
+                    <path class="wa-press" d="M120 24l12-8"/>
+                    <path class="wa-press" d="M146 22l12-8"/>
+                    <path class="wa-press" d="M172 26l12-8"/>
+                    <path class="wa-dorsal" d="M92 54c2-9 8-15 16-17-6 7-10 14-11 21"/>
+                    <path class="wa-groove" d="M100 114c24 8 58 8 86-4"/>
+                  </g>
+                  <path class="wa-lid" d="M170 80c3 5 9 5 12 0"/>
+                  <path class="wa-lash" d="M176 87v4"/>
+                  <circle class="wa-bubble" cx="78" cy="142" r="4"/>
+                  <circle class="wa-bubble" cx="64" cy="151" r="2.5"/>
+                  <circle class="wa-bubble" cx="198" cy="140" r="3"/>
+                </svg>
+
+                <svg class="whale-art whale-art--progenitor" viewBox="0 0 240 160" aria-hidden="true" focusable="false">
+                  <g class="wa" transform="rotate(5 120 90) translate(-6 -2) scale(1.06)">
+                    <use href="#whale-base"/>
+                    <path class="wa-hatch" d="M48 148l12-8"/>
+                    <path class="wa-hatch" d="M72 152l12-8"/>
+                    <path class="wa-hatch" d="M96 150l12-8"/>
+                    <path class="wa-hatch" d="M176 148l12-8"/>
+                    <path class="wa-hatch" d="M200 152l12-8"/>
+                    <path class="wa-dorsal" d="M84 56c4-16 16-26 30-27-11 10-18 21-19 32"/>
+                    <path class="wa-groove" d="M100 114c24 8 58 8 86-4"/>
+                    <path class="wa-whisker" d="M176 114c-8 14-20 24-36 31"/>
+                    <path class="wa-whisker" d="M186 112c-4 14-12 26-24 35"/>
+                    <path class="wa-whisker" d="M166 118c-12 10-26 18-40 23"/>
+                  </g>
+                  <circle class="wa-ring" cx="176" cy="82" r="7"/>
+                  <circle class="wa-eye" cx="176" cy="82" r="3"/>
+                  <circle class="wa-glint" cx="178.4" cy="79.4" r="1.2"/>
                 </svg>
               </div>
               <div class="stage__caption">
@@ -254,7 +395,7 @@
             </div>
 
             <div class="gate" id="bet-gate" hidden>
-              <svg class="gate__glyph" viewBox="0 0 48 48" aria-hidden="true"><use href="#glyph-whale"></use></svg>
+              <svg class="ic gate__glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-whale"></use></svg>
               <strong data-text="detail.gateTitle">登录后即可投入</strong>
               <p data-text="detail.gateBody">匿名访客可以浏览市场与排行榜。请在 Linux.do 登录后重新打开「预言鲸」。</p>
             </div>
@@ -301,7 +442,9 @@
           <h1 class="display" id="leaderboard-title" data-text="leaderboard.heading">排行榜</h1>
           <p class="intro" data-text="leaderboard.intro">赛季内按总资产或命中率排名，匿名也可以围观。</p>
         </div>
-        <button class="ghost" id="leaderboard-refresh" type="button" data-text="common.refresh">刷新</button>
+        <button class="ghost" id="leaderboard-refresh" type="button">
+          <svg class="ic btn__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-refresh"></use></svg><span data-text="common.refresh">刷新</span>
+        </button>
       </header>
 
       <div class="board-controls">
@@ -326,7 +469,7 @@
         <span data-text="leaderboard.reading">正在读取榜单</span>
       </div>
       <div class="state state--empty" id="leaderboard-empty" hidden>
-        <svg class="state__glyph" viewBox="0 0 48 48" aria-hidden="true"><use href="#glyph-whale"></use></svg>
+        <svg class="ic state__glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-whale"></use></svg>
         <strong data-text="leaderboard.emptyTitle">这一季还没有排名</strong>
         <span data-text="leaderboard.emptyBody">完成第一笔预测，就能出现在这里。</span>
       </div>
@@ -346,7 +489,7 @@
       </header>
 
       <div class="gate gate--profile" id="me-gate" hidden>
-        <svg class="gate__glyph" viewBox="0 0 48 48" aria-hidden="true"><use href="#glyph-whale"></use></svg>
+        <svg class="ic gate__glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-whale"></use></svg>
         <strong data-text="me.guestTitle">登录后查看我的数据</strong>
         <p data-text="me.guestBody">匿名访客可以浏览市场与排行榜。请在 Linux.do 登录后重新打开「预言鲸」，即可领取鲸珠、查看持仓与历史。</p>
         <button class="primary" type="button" id="me-gate-markets" data-text="me.goMarkets">去逛市场</button>
@@ -370,7 +513,10 @@
             <span class="profile-card__unit" data-text="common.chips">鲸珠</span>
           </div>
           <div class="profile-card__claim">
-            <button class="primary" id="claim" type="button">领取每日鲸珠</button>
+            <button class="primary" id="claim" type="button">
+              <svg class="ic btn__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-claim"></use></svg>
+              <span id="claim-text">领取每日鲸珠</span>
+            </button>
             <p class="hint" id="claim-hint" role="status" aria-live="polite"></p>
           </div>
         </section>

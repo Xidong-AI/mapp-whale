@@ -3,7 +3,7 @@ import { CACHE_TTL } from "../config.ts";
 import { PAGE_SIZE } from "../config.ts";
 import type { AppContext } from "../context.ts";
 import { t } from "../copy.ts";
-import { byId, clear, el, setText, show, statusTag } from "../dom.ts";
+import { byId, clear, el, makeIcon, setText, show, statusTag } from "../dom.ts";
 import { describeError } from "../errors.ts";
 import {
   formatChips,
@@ -87,7 +87,9 @@ export function createMarketsView(ctx: AppContext): MarketsView {
       countdown.dataset.countdown = String(market.deadline);
       countdown.dataset.countdownPrefix = "left";
     }
-    head.append(statusTag(status.label, status.tone), countdown);
+    const when = el("span", "when");
+    when.append(makeIcon("i-clock"), countdown);
+    head.append(statusTag(status.label, status.tone), when);
 
     const title = el("h2", "market-card__title");
     title.textContent = market.title;
@@ -104,11 +106,13 @@ export function createMarketsView(ctx: AppContext): MarketsView {
     const labels = el("div", "consensus-mini__labels");
     const yesLabel = el("span");
     yesLabel.append(
+      makeIcon("i-up"),
       document.createTextNode(`${t("detail.sideYes")} `),
       Object.assign(el("b"), { textContent: `${yes}%` })
     );
     const noLabel = el("span");
     noLabel.append(
+      makeIcon("i-down"),
       document.createTextNode(`${t("detail.sideNo")} `),
       Object.assign(el("b"), { textContent: `${100 - yes}%` })
     );

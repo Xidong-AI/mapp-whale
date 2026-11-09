@@ -41,6 +41,20 @@ export function makeButton(
   return button;
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+export function makeIcon(ref: string): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.classList.add("ic");
+  const use = document.createElementNS(SVG_NS, "use");
+  use.setAttribute("href", `#${ref}`);
+  svg.append(use);
+  return svg;
+}
+
 export function statusTag(
   label: string,
   tone: "open" | "locked" | "settled" | "void" | "yes" | "no"
