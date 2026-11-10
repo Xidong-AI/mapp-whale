@@ -96,13 +96,13 @@ describe('m_v4_1_pro_before_dec', () => {
 });
 
 describe('m_v5_when 2028plus 收窄', () => {
-  test('end 收窄到池截止时刻 1861891199000，标签为「2028 年内（截止前）」', () => {
+  test('end 收窄到池截止时刻 1861891199000，标签为 2028 年内', () => {
     const row = outcomeRow('m_v5_when', '2028plus');
     const cond = parseCondition(JSON.parse(row.condition_json));
     expect(cond.kind).toBe('first_seen_between');
     if (cond.kind !== 'first_seen_between') return;
     expect(cond.start).toBe(1830268800000);
     expect(cond.end).toBe(1861891199000);
-    expect(row.label).toBe('2028 年内（截止前）');
+    expect(row.label).toBe('2028 年内');
   });
 });

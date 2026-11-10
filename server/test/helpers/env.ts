@@ -14,7 +14,7 @@ export function loadMigrations(db: MemoryD1, files: string[]): void {
 
 export function makeEnv(overrides: Partial<Env> = {}): { env: Env; db: MemoryD1 } {
   const db = new MemoryD1();
-  loadMigrations(db, ['0001_init.sql', '0002_guards.sql', '0003_outcomes.sql', '0004_seed_markets.sql', '0005_market_copy_and_v4_1_pro.sql']);
+  loadMigrations(db, ['0001_init.sql', '0002_guards.sql', '0003_outcomes.sql', '0004_seed_markets.sql', '0005_market_copy_and_v4_1_pro.sql', '0006_concise_market_copy.sql']);
   const env: Env = {
     DB: db as unknown as Env['DB'],
     DEEPSEEK_API_KEY: 'test-deepseek-key',
