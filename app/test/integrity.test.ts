@@ -130,6 +130,8 @@ describe("contract endpoints", () => {
         "storage.write",
         "theme.read",
         "user.read",
+        "launch.read",
+        "clipboard.write",
       ].sort()
     );
   });

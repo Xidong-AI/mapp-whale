@@ -125,7 +125,23 @@
       "voidRefund": "市场已取消，投入将全额退款",
       "settledWinner": "判定为 {label}",
       "settlingWait": "结算中，请稍候",
-      "hitOutcomes": "已命中 {count} 个结果"
+      "hitOutcomes": "已命中 {count} 个结果",
+      "embedCopy": "嵌入代码",
+      "embedCopyAria": "复制嵌入代码，可粘贴到论坛帖子",
+      "embedCopied": "嵌入代码已复制",
+      "embedCopyFailed": "复制失败，请手动复制"
+    },
+    "card": {
+      "brand": "预言鲸",
+      "loading": "正在读取市场…",
+      "emptyTitle": "还没有指定市场",
+      "emptyHint": "链接没有指向具体市场，或该市场已经下架。",
+      "errorTitle": "市场数据没有浮上来",
+      "retry": "重试",
+      "pool": "彩池总计",
+      "participants": "参与 {count}",
+      "distAria": "各结果隐含概率，从高到低",
+      "updatedAt": "更新于 {time}"
     },
     "leaderboard": {
       "eyebrow": "第 {season} 赛季",

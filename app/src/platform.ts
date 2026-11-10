@@ -42,6 +42,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+/**
+ * 连接平台的第一步：只等 sdk.ready 并读取主题，不读取用户。
+ * 用户信息由 loadPlatformUser 按需读取（嵌入卡片模式完全跳过）。
+ */
 export async function connectPlatform(): Promise<PlatformConnection> {
   let sdk: MiniAppSDK | null = null;
   try {
@@ -55,25 +59,90 @@ export async function connectPlatform(): Promise<PlatformConnection> {
 
   try {
     await withTimeout(sdk.ready, 8000);
-    const canReadUser = sdk.permissions.has("user.read");
-    const canReadTheme = sdk.permissions.has("theme.read");
-    const [user, theme] = await Promise.all([
-      canReadUser
-        ? sdk.user.getCurrent({ timeoutMs: 8000 }).catch(() => null)
-        : Promise.resolve(null),
-      canReadTheme ? sdk.theme.get().catch(() => null) : Promise.resolve(null),
-    ]);
-    return {
-      sdk,
-      mode: user ? "connected" : "guest",
-      user,
-      theme,
-    };
+    const theme = sdk.permissions.has("theme.read")
+      ? await sdk.theme.get().catch(() => null)
+      : null;
+    return { sdk, mode: "guest", user: null, theme };
   } catch (error) {
     console.warn("[预言鲸] 社区连接失败", error);
     debugLog("connect error", error);
     return { sdk, mode: "error", user: null, theme: null };
   }
+}
+
+/**
+ * 连接平台的第二步：读取当前用户（若有 user.read 权限）。
+ * 返回新对象，不修改入参；匿名或失败时回落 guest。
+ */
+export async function loadPlatformUser(
+  connection: PlatformConnection
+): Promise<PlatformConnection> {
+  const sdk = connection.sdk;
+  // error/preview 或无 SDK：保持原 mode（demo 连接自带 user 也原样保留）。
+  if (!sdk || connection.mode === "error") {
+    return { ...connection };
+  }
+  if (!sdk.permissions.has("user.read")) {
+    return { ...connection, user: null, mode: "guest" };
+  }
+  try {
+    const user = await sdk.user
+      .getCurrent({ timeoutMs: 8000 })
+      .catch(() => null);
+    return { ...connection, user, mode: user ? "connected" : "guest" };
+  } catch (error) {
+    console.warn("[预言鲸] 读取用户失败", error);
+    debugLog("user error", error);
+    return { ...connection, user: null, mode: "guest" };
+  }
+}
+
+/**
+ * 读取启动参数（需要 launch.read 权限）。返回 SDK 透传的 query，
+ * 任何失败（缺权限、无 SDK、抛错）都返回 null，由调用方回落 location.search。
+ */
+export async function readLaunchParameters(
+  connection: PlatformConnection
+): Promise<Record<string, string[]> | null> {
+  const sdk = connection.sdk;
+  if (!sdk || !sdk.permissions.has("launch.read")) return null;
+  try {
+    const parameters = await withTimeout(sdk.launch.getParameters(), 8000);
+    const query = parameters?.query;
+    if (!query || typeof query !== "object") return null;
+    return query;
+  } catch (error) {
+    debugLog("launch params error", error);
+    return null;
+  }
+}
+
+/**
+ * 写剪贴板：优先走 SDK（clipboard.write 权限），否则尝试浏览器 API。
+ * 两条路径都失败时抛错，由调用方提示用户。
+ */
+export async function writeClipboard(
+  connection: PlatformConnection,
+  text: string
+): Promise<void> {
+  const sdk = connection.sdk;
+  if (sdk && sdk.permissions.has("clipboard.write")) {
+    try {
+      await sdk.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      debugLog("sdk clipboard error", error);
+    }
+  }
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      debugLog("navigator clipboard error", error);
+    }
+  }
+  throw new Error("CLIPBOARD_WRITE_FAILED");
 }
 
 export function watchTheme(

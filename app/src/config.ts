@@ -7,6 +7,13 @@ export const API_ORIGIN = "https://whale-api.example.com";
 export const REQUEST_TIMEOUT_MS = 12_000;
 export const STORAGE_PREFIX = "whale:v1:";
 
+/**
+ * manifest.json 的占位应用 ID。scripts/package.ts 打包时会把 bundle 与
+ * 构建产物中的该值替换成 manifest.id。
+ */
+export const APP_ID = "00000000-0000-7000-8000-000000000000";
+export const APP_ORIGIN = "https://linux.do/apps";
+
 export const ENDPOINTS = {
   publicConfig: { method: "GET", path: "/public/config" },
   publicMarkets: { method: "GET", path: "/public/markets" },

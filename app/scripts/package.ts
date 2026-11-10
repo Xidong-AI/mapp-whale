@@ -50,6 +50,16 @@ if (
   );
 }
 
+// bundle 里的 APP_ID 常量（src/config.ts）默认是占位 ID；打包时替换成真实 ID，
+// 让嵌入 iframe 代码无需额外配置就能指向正确的应用地址。
+if (manifest.id !== PLACEHOLDER_ID) {
+  const bundleWithApi = await readFile(bundlePath, "utf8");
+  await writeFile(
+    bundlePath,
+    bundleWithApi.split(PLACEHOLDER_ID).join(manifest.id)
+  );
+}
+
 await copyFile("src/template.html", "dist/web/index.html");
 await copyFile("src/strings.json", "dist/web/strings.json");
 

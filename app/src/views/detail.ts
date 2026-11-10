@@ -77,6 +77,7 @@ export function createDetailView(ctx: AppContext): DetailView {
   const countdown = byId("detail-countdown");
   const title = byId("detail-title");
   const desc = byId("detail-desc");
+  const embedButton = byId<HTMLButtonElement>("detail-embed");
 
   const whale = byId("whale");
   const whaleTitle = byId<HTMLElement>("whale-title");
@@ -119,6 +120,7 @@ export function createDetailView(ctx: AppContext): DetailView {
   let currentId: string | null = null;
   let token = 0;
   let submitting = false;
+  let embedBusy = false;
   const pendingBets = new Map<string, string>();
   let draftTimer: ReturnType<typeof setTimeout> | null = null;
   let transientHint = "";
@@ -142,6 +144,12 @@ export function createDetailView(ctx: AppContext): DetailView {
     const selected = market ? outcomeById(market, selectedOutcomeId) : null;
     betSide.className = `tag ${selected ? "tag--open" : "tag--idle"}`;
     betSide.textContent = selected?.label ?? t("detail.pendingSide");
+  }
+
+  function setEmbedBusy(busy: boolean): void {
+    embedBusy = busy;
+    embedButton.disabled = busy || !current;
+    embedButton.toggleAttribute("aria-busy", busy);
   }
 
   function isBettingOpen(market: Market): boolean {
@@ -498,6 +506,8 @@ export function createDetailView(ctx: AppContext): DetailView {
     show(body, true);
     show(errorEl, false);
     show(loadingEl, false);
+    show(embedButton, true);
+    setEmbedBusy(false);
     title.textContent = market.title;
     desc.textContent = market.description;
     setText(sliderHelp, t("detail.sliderHelp"));
@@ -702,6 +712,8 @@ export function createDetailView(ctx: AppContext): DetailView {
       show(body, false);
       show(errorEl, false);
       show(loadingEl, true);
+      show(embedButton, false);
+      setEmbedBusy(false);
     }
 
     try {
@@ -728,6 +740,8 @@ export function createDetailView(ctx: AppContext): DetailView {
         show(body, false);
         show(loadingEl, false);
         show(errorEl, true);
+        show(embedButton, false);
+        setEmbedBusy(false);
         errorText.textContent = describeError(error);
       }
     } finally {
@@ -771,6 +785,13 @@ export function createDetailView(ctx: AppContext): DetailView {
       scheduleDraft();
     });
   }
+
+  embedButton.addEventListener("click", () => {
+    if (!current || embedBusy) return;
+    const market = current;
+    setEmbedBusy(true);
+    void ctx.copyEmbedCode(market).finally(() => setEmbedBusy(false));
+  });
 
   submitButton.addEventListener("click", () => void submit());
   byId("detail-back").addEventListener("click", () => ctx.goTab("markets"));

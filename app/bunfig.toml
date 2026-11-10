@@ -1,0 +1,4 @@
+[test]
+
+# card 视图需要 DOM 环境，其余测试不受影响。
+preload = ["./test/dom.preload.ts"]

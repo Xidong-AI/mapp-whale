@@ -216,6 +216,30 @@ Cron 每 10 分钟拉取 `/models`，对每个 open/locked 市场：
 - 持仓/历史：按 outcome 显示。
 - 文案避开“下注/赔率/赌博”，用“预测/投入/彩池/预期回报/结算”。
 
+## 7.1 嵌入卡片启动参数
+
+应用支持以只读卡片模式嵌入论坛帖子：
+
+```html
+<iframe src="https://linux.do/apps/<appId>?embed_mode=true&card=1&market=<marketId>" width="100%" height="340" frameborder="0" allow="clipboard-write" loading="lazy"></iframe>
+```
+
+启动参数（由 SDK `launch.getParameters()` 透传，需要 `launch.read` 权限；应用内同时兼容 `location.search`，本地 dev 无 SDK 时可用）：
+
+| 参数         | 语义                                                         |
+| ------------ | ------------------------------------------------------------ |
+| `embed_mode` | 任意非空值即进入嵌入模式                                     |
+| `card`       | 任意非空值即渲染卡片视图                                     |
+| `market`     | 目标市场 ID，取第一个值；空串视为缺失                        |
+
+行为约定：
+
+- 三者任一存在即进入卡片模式；卡片模式只读展示单个市场的当前分布条形图，不加载用户态、配置与 tabs 路由。
+- `market` 缺失、为空串、超过 128 字符或含 `[A-Za-z0-9_.-]` 之外字符时按缺失处理，渲染空态。
+- 请求失败或市场返回 0 条时渲染错误态（带重试）或空态；不弹 toast、不写缓存。
+- 无新增 HTTP 端点：卡片复用 `GET /public/markets?id=<marketId>`。
+- 高度随结果数自适应（`340–640px`），嵌入方也可固定高度。
+
 ## 8. 迁移
 
 - 生产当前 0 笔下注，可直接重建。

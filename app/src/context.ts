@@ -43,4 +43,6 @@ export interface AppContext {
   requestLogin(): void;
   refreshMe(): Promise<void>;
   isSignedIn(): boolean;
+  /** 生成市场嵌入 iframe 代码并写入剪贴板（详情页使用）。 */
+  copyEmbedCode(market: Market): Promise<void>;
 }

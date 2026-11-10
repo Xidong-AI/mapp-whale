@@ -41,7 +41,7 @@ Vite 输出单份 IIFE `app.js` 与 `app.css`，`scripts/package.ts` 按官方�
    打包时也可临时覆盖：
 
    ```sh
-   MINI_APP_ID=<app-id> MINI_APP_VERSION=1.0.0 bun run build
+   MINI_APP_ID=<app-id> MINI_APP_VERSION=1.1.0 bun run build
    ```
 
 3. **manifest endpoints** 与 `docs/CONTRACT.md` 第 8 节逐字一致；`test/integrity.test.ts` 会校验名称、方法、路径、auth 与动态 query。不要只改 manifest 而漏掉 `src/config.ts`。
@@ -78,6 +78,8 @@ app/
 - `?demo=1&view=markets|leaderboard|me`：直接打开某个页签。
 - `?demo=1&detail=<marketId>`：直接打开市场详情。
 - `?demo=1&detail=...&confidence=72&amount=100`：预置滑块与金额，方便检查鲸鱼形态。
+- `?demo=1&card=<marketId>`：直接渲染嵌入卡片（帖子 iframe 看到的界面）。
+- `?demo=1&card=1&missing=1`：卡片空态（缺 market 参数）预览。
 
 以上 query 仅在 `import.meta.env.DEV` 下生效，不会进入生产包。
 

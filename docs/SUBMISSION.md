@@ -17,8 +17,23 @@
 | `storage.read`      | 读取本地缓存的市场、榜单和草稿         |
 | `storage.write`     | 写入本地缓存与未提交草稿               |
 | `theme.read`        | 跟随论坛深浅色主题                     |
+| `launch.read`       | 读取嵌入卡片启动参数（`embed_mode` / `card` / `market`） |
+| `clipboard.write`   | 详情页「复制嵌入代码」写入剪贴板       |
 
-未申请剪贴板、全屏、媒体、文件、外链等未使用权限。
+未申请剪贴板读取、全屏、媒体、文件、外链等未使用权限。
+
+## 2.1 嵌入代码
+
+应用支持嵌入论坛帖子：帖子中粘贴一段 iframe 即可只读展示某个市场的实时分布。
+
+1. 在应用内打开目标市场详情，点「复制嵌入代码」，得到类似下面的一行 HTML：
+
+```html
+<iframe src="https://linux.do/apps/01a1c002-2ff0-7bf9-aeb7-bc25e4e6cbb0?embed_mode=true&card=1&market=m_v5_when" title="预言鲸 · V5 什么时候发布？" width="100%" height="480" frameborder="0" allow="clipboard-write" loading="lazy"></iframe>
+```
+
+2. 把这段代码粘贴到帖子正文（编辑器 HTML 模式），发布后即显示实时分布卡片。
+3. `height` 由应用按结果数自动计算（340–640），可手动调整；`market` 换成目标市场 ID。
 
 ## 3. 网络端点
 
@@ -75,7 +90,7 @@
 ```sh
 cd app
 bun install --frozen-lockfile
-MINI_APP_ID=<应用页分配的 UUIDv7> MINI_APP_VERSION=1.0.0 bun run build
+MINI_APP_ID=<应用页分配的 UUIDv7> MINI_APP_VERSION=1.1.0 bun run build
 ```
 
 产物：`dist/package/app.zip`。只上传该 ZIP，不上传项目目录或 `package.json`。
