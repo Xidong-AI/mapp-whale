@@ -258,6 +258,10 @@ export async function startApp(): Promise<void> {
     return;
   }
 
+  // 第二步：读取用户（嵌入卡片模式已提前 return）。
+  connection = await loadPlatformUser(connection);
+  debugLog("user loaded", { mode: connection.mode });
+
   const cache = createCache(browserStorage());
   const api = createApi(
     demoMode
@@ -601,10 +605,6 @@ export async function startApp(): Promise<void> {
     connection.theme = theme;
     applyTheme();
   });
-
-  // 第二步：按需读取用户（嵌入卡片模式已在上面 return，不会走到这里）。
-  connection = await loadPlatformUser(connection);
-  debugLog("user loaded", { mode: connection.mode });
 
   if (devParams) {
     const confidence = Number(devParams.get("confidence"));
