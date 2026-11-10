@@ -181,9 +181,9 @@ Cron 每 10 分钟拉取 `/models`，对每个 open/locked 市场：
   - `2027q2`：2027-04-01 ~ 2027-07-01
   - `2027q3`：2027-07-01 ~ 2027-10-01
   - `2027q4`：2027-10-01 ~ 2028-01-01
-  - `2028plus`：2028-01-01 起
-  - `never`：fallback，截止未出现
-- 条件统一 `first_seen_between`，`2028plus` 的 `end = null`，`never` 用 `manual`。
+  - `2028plus`：2028-01-01 ~ 2028-12-31 23:59:59，标签「2028 年内（截止前）」
+  - `never`：fallback，截止未出现，标签「截止前未发布」
+- 条件统一 `first_seen_between`，`2028plus` 的 `end = 1861891199000`（收窄到池截止时刻），`never` 用 `manual`。
 
 ### V5 上下文 `m_v5_context`
 
@@ -207,6 +207,14 @@ Cron 每 10 分钟拉取 `/models`，对每个 open/locked 市场：
   - `256k-500k`：262144 ~ 512000
   - `>=500k`：min 512000
   - `unknown`：fallback
+
+### DeepSeek V4.1 Pro 12 月前发布 `m_v4_1_pro_before_dec`
+
+- 截止：北京时间 2026-12-01 00:00:00（1796054400000）。
+- 结算：`exclusive`，fallback `not-before-dec`。
+- outcomes：
+  - `before-dec`：标签「12 月前发布」，条件 `first_seen_between`，regex `DeepSeek[-_ ]?V4[.]1[-_ ]?Pro`，flags `i`，窗口 `[0, 1796054400000)`。name 需同时包含「V4.1」与「Pro」（现有 `DeepSeek-V4.1-Flash`、`DeepSeek-V4-Pro` 不算）；首次观测时间严格早于截止才命中。
+  - `not-before-dec`：标签「12 月前未发布」，fallback（`manual`，截止仍未出现时结算）。
 
 ## 7. 前端
 
